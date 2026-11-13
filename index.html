@@ -141,10 +141,13 @@ Assessoria Gama"></textarea>
           <article class="surface-card target-builder">
             <div class="builder-heading"><div><span class="step-number">1</span><div><h3>Escolha a base da meta</h3><p>Decida qual parte da recuperação será considerada.</p></div></div></div>
             <div class="builder-grid">
-              <div class="control-block"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto</option><option value="active">Recuperado ativo</option><option value="canceled">Recuperado cancelado</option></select></div>
+              <div class="control-block"><label for="targetHistoryView">Base histórica</label><select id="targetHistoryView"><option value="monthly">Histórico mensal</option><option value="aging">Aging da dívida</option><option value="document">Tipo de documento</option><option value="due_year">Ano de vencimento</option></select></div>
+              <div class="control-block" id="targetBasisBlock"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto</option><option value="active">Recuperado ativo</option><option value="canceled">Recuperado cancelado</option></select></div>
+              <div class="control-block hidden" id="targetDetailFilterBlock"><label for="targetDetailFilter" id="targetDetailFilterLabel">Detalhamento</label><select id="targetDetailFilter"></select></div>
               <div class="control-block"><label for="baselineMode">Referência histórica</label><select id="baselineMode"><option value="average">Média mensal do período</option><option value="last">Último mês completo com dado</option></select></div>
               <div class="control-block"><label for="targetMode">Como deseja definir a meta?</label><select id="targetMode"><option value="history_growth">Crescimento sobre o histórico</option><option value="manual">Valor manual por assessoria</option><option value="monthly_growth">Aumento percentual a cada mês</option></select></div>
             </div>
+            <p class="target-source-note hidden" id="targetSourceNote"></p>
             <div class="builder-divider"></div>
             <div class="mode-controls" id="historyGrowthControls">
               <div class="control-block control-growth"><div class="growth-label"><label for="growthNumber">Aumento inicial sobre a referência</label><div class="growth-input-wrap"><input id="growthNumber" type="number" min="0" max="1000" step="0.5" value="10"><span>%</span></div></div><input id="growthSlider" type="range" min="0" max="100" step="1" value="10"><div class="range-markers"><span>0%</span><span>50%</span><span>100%</span></div></div>

@@ -30,6 +30,7 @@
     rows: [], policy: [], fileName: '', year: null, agencies: [], hasHistory: false,
     startMonth: 1, endMonth: 9, includePartial: false, agencyFilter: 'ALL',
     baselineMode: 'average', targetBasis: 'recovered', targetMode: 'history_growth',
+    targetHistoryView: 'monthly', targetDetailFilter: 'ALL', dueYearRows: [],
     growth: 10, monthlyGrowthRate: 2, monthlyInitialGrowth: 0, projectionMonths: 12,
     manualTargets: {}, manualDefault: null,
     activeTab: 'overview', activeModule: 'assessorias',
@@ -145,23 +146,46 @@
     return range ? `${Number(range[1])}-${Number(range[2])}` : null;
   }
 
+  function mapDetailedAgingKey(label) {
+    const value = normalized(label);
+    const match = value.match(/^\s*(\d{1,2})\s*[-–]/);
+    return match ? match[1].padStart(2, '0') : null;
+  }
+
   function parseAgencyAgingRows(rows) {
     const byMonth = new Map();
     (rows || []).forEach(row => {
       const monthRaw = normalized(row?.[0]).split(/[\s(]/)[0];
       const month = MONTH_LOOKUP[monthRaw] || FULL_MONTH_LOOKUP[monthRaw];
-      const bucket = mapDetailAgingBucket(row?.[1]);
       if (!month) return;
-      if (!byMonth.has(month)) byMonth.set(month, { month, amounts: {}, cpf: 0, cnpj: 0, hasCpf: false, hasCnpj: false });
+      if (!byMonth.has(month)) {
+        byMonth.set(month, {
+          month, amounts: {}, agingDetails: {}, cpf: null, cnpj: null,
+          cpfCommission: null, cnpjCommission: null, hasCpf: false, hasCnpj: false
+        });
+      }
       const data = byMonth.get(month);
-      if (bucket) data.amounts[bucket] = (data.amounts[bucket] || 0) + parseNumeric(row?.[2]);
+      const detailKey = mapDetailedAgingKey(row?.[1]);
+      const policyKey = mapDetailAgingBucket(row?.[1]);
+      if (detailKey) {
+        const recovered = parseOptionalNumeric(row?.[2]);
+        const commission = parseOptionalNumeric(row?.[3]);
+        const label = String(row?.[1] ?? '').trim();
+        if (!data.agingDetails[detailKey]) {
+          data.agingDetails[detailKey] = { key: detailKey, label, recovered: null, commission: null };
+        }
+        const detail = data.agingDetails[detailKey];
+        if (Number.isFinite(recovered)) detail.recovered = (detail.recovered || 0) + recovered;
+        if (Number.isFinite(commission)) detail.commission = (detail.commission || 0) + commission;
+        if (policyKey && Number.isFinite(recovered)) data.amounts[policyKey] = (data.amounts[policyKey] || 0) + recovered;
+      }
       const contractType = normalized(row?.[5]);
-      if (contractType === 'CPF') {
-        data.cpf += parseNumeric(row?.[6]);
-        data.hasCpf = true;
-      } else if (contractType === 'CNPJ') {
-        data.cnpj += parseNumeric(row?.[6]);
-        data.hasCnpj = true;
+      if (contractType === 'CPF' || contractType === 'CNPJ') {
+        const recovered = parseOptionalNumeric(row?.[6]);
+        const commission = parseOptionalNumeric(row?.[7]);
+        data[contractType.toLowerCase()] = Number.isFinite(recovered) ? recovered : null;
+        data[`${contractType.toLowerCase()}Commission`] = Number.isFinite(commission) ? commission : null;
+        data[`has${contractType === 'CPF' ? 'Cpf' : 'Cnpj'}`] = Number.isFinite(recovered) || Number.isFinite(commission);
       }
     });
     return [...byMonth.values()].sort((a, b) => a.month - b.month);
@@ -176,6 +200,52 @@
       const months = parseAgencyAgingRows(sheetRows);
       if (months.length) parsed[normalized(agency)] = months;
     });
+    return parsed;
+  }
+
+  function canonicalAgencyName(rawName, agencies) {
+    const key = normalized(rawName);
+    const exact = agencies.find(name => normalized(name) === key);
+    if (exact) return exact;
+    // Na visão por vencimento, a aba individual se chama "Open", mas a origem usa "Open Credit".
+    if (key.startsWith('OPEN')) return agencies.find(name => normalized(name) === 'OPEN') || rawName;
+    const partial = agencies.find(name => key.startsWith(normalized(name)) || normalized(name).startsWith(key));
+    return partial || rawName;
+  }
+
+  function parseDueYearRows(rows, agencies) {
+    let headerIndex = -1;
+    let columns = null;
+    for (let index = 0; index < Math.min(rows.length, 12); index += 1) {
+      const row = rows[index] || [];
+      const agency = findHeaderIndex(row, ['ASSESSORIA']);
+      const month = findHeaderIndex(row, ['MES']);
+      const year = findHeaderIndex(row, ['ANO DE VENCIMENTO']);
+      const recovered = findHeaderIndex(row, ['VALOR RECUPERADO']);
+      if (agency >= 0 && month >= 0 && year >= 0 && recovered >= 0) {
+        headerIndex = index;
+        columns = { agency, month, year, recovered, commission: findHeaderIndex(row, ['COMISSAO']) };
+        break;
+      }
+    }
+    if (headerIndex < 0) return [];
+    const parsed = [];
+    for (let index = headerIndex + 1; index < rows.length; index += 1) {
+      const row = rows[index] || [];
+      const agencyRaw = String(row[columns.agency] ?? '').trim();
+      const monthRaw = normalized(row[columns.month]).split(/[\s(]/)[0];
+      const month = MONTH_LOOKUP[monthRaw] || FULL_MONTH_LOOKUP[monthRaw];
+      const yearValue = parseOptionalNumeric(row[columns.year]);
+      const agencyKey = normalized(agencyRaw);
+      if (!agencyRaw || agencyKey.includes('TOTAL') || !month || !Number.isFinite(yearValue)) continue;
+      const agency = canonicalAgencyName(agencyRaw, agencies);
+      parsed.push({
+        agency, month, monthLabel: MONTHS[month - 1].short, dueYear: Math.trunc(yearValue),
+        recovered: parseOptionalNumeric(row[columns.recovered]),
+        commission: columns.commission >= 0 ? parseOptionalNumeric(row[columns.commission]) : null,
+        sourceRow: index + 1
+      });
+    }
     return parsed;
   }
 
@@ -244,7 +314,7 @@
   }
 
   function manualTargetKey(agency, basis = state.targetBasis) {
-    return `${basis}::${agency}`;
+    return `${state.targetHistoryView}::${state.targetDetailFilter}::${basis}::${agency}`;
   }
 
   function metricFromRow(row, basis) {
@@ -254,15 +324,132 @@
     return null;
   }
 
-  function getBaseline(group, basis, mode = state.baselineMode) {
-    const eligible = group.records.map(row => ({ row, value: metricFromRow(row, basis) })).filter(item => Number.isFinite(item.value));
+  function isPartialDetailMonth(agency, month) {
+    const key = normalized(agency);
+    return state.rows.some(row => normalized(row.agency) === key && row.month === month && row.partial);
+  }
+
+  function isMonthInCurrentWindow(agency, month) {
+    if (month < state.startMonth || month > state.endMonth) return false;
+    if (!state.includePartial && isPartialDetailMonth(agency, month)) return false;
+    return true;
+  }
+
+  function aggregateBaseline(values, mode = state.baselineMode) {
+    const eligible = values.filter(item => Number.isFinite(item.value)).sort((a, b) => a.month - b.month);
     if (!eligible.length) return { value: null, count: 0, latestMonth: null, total: 0 };
+    const total = eligible.reduce((acc, item) => acc + item.value, 0);
     if (mode === 'last') {
       const latest = eligible[eligible.length - 1];
-      return { value: latest.value, count: eligible.length, latestMonth: latest.row.monthLabel, total: eligible.reduce((acc, item) => acc + item.value, 0) };
+      return { value: latest.value, count: eligible.length, latestMonth: MONTHS[latest.month - 1]?.short || null, total };
     }
-    const total = eligible.reduce((acc, item) => acc + item.value, 0);
-    return { value: total / eligible.length, count: eligible.length, latestMonth: eligible[eligible.length - 1].row.monthLabel, total };
+    return { value: total / eligible.length, count: eligible.length, latestMonth: MONTHS[eligible[eligible.length - 1].month - 1]?.short || null, total };
+  }
+
+  function getMonthlyBaseline(group, basis, mode = state.baselineMode) {
+    return aggregateBaseline(group.records.map(row => ({ month: row.month, value: metricFromRow(row, basis) })), mode);
+  }
+
+  function getDetailedMonths(agency) {
+    return (state.agingByAgency[normalized(agency)] || []).filter(item => isMonthInCurrentWindow(agency, item.month));
+  }
+
+  function getTargetBaseline(group, basis, mode = state.baselineMode) {
+    if (state.targetHistoryView === 'monthly') return getMonthlyBaseline(group, basis, mode);
+
+    if (state.targetHistoryView === 'aging') {
+      const key = state.targetDetailFilter;
+      const values = getDetailedMonths(group.agency).map(item => {
+        if (key === 'ALL') {
+          const details = Object.values(item.agingDetails || {});
+          return { month: item.month, value: details.some(detail => Number.isFinite(detail.recovered)) ? sum(details.map(detail => detail.recovered).filter(Number.isFinite)) : null };
+        }
+        return { month: item.month, value: Number.isFinite(item.agingDetails?.[key]?.recovered) ? item.agingDetails[key].recovered : null };
+      });
+      return aggregateBaseline(values, mode);
+    }
+
+    if (state.targetHistoryView === 'document') {
+      const key = state.targetDetailFilter === 'CNPJ' ? 'cnpj' : 'cpf';
+      const values = getDetailedMonths(group.agency).map(item => ({ month: item.month, value: Number.isFinite(item[key]) ? item[key] : null }));
+      return aggregateBaseline(values, mode);
+    }
+
+    if (state.targetHistoryView === 'due_year') {
+      const rows = state.dueYearRows.filter(row => normalized(row.agency) === normalized(group.agency) && isMonthInCurrentWindow(group.agency, row.month) && (state.targetDetailFilter === 'ALL' || String(row.dueYear) === String(state.targetDetailFilter)));
+      const byMonth = new Map();
+      rows.forEach(row => {
+        if (!byMonth.has(row.month)) byMonth.set(row.month, { month: row.month, value: 0, hasValue: false });
+        const bucket = byMonth.get(row.month);
+        if (Number.isFinite(row.recovered)) { bucket.value += row.recovered; bucket.hasValue = true; }
+      });
+      return aggregateBaseline([...byMonth.values()].map(item => ({ month: item.month, value: item.hasValue ? item.value : null })), mode);
+    }
+
+    return { value: null, count: 0, latestMonth: null, total: 0 };
+  }
+
+  function getTargetSourceLabel() {
+    return ({ monthly: 'Histórico mensal', aging: 'Aging da dívida', document: 'Tipo de documento', due_year: 'Ano de vencimento' })[state.targetHistoryView] || 'Histórico mensal';
+  }
+
+  function getTargetDetailLabel() {
+    if (state.targetHistoryView === 'monthly') return BASIS_LABELS[state.targetBasis];
+    if (state.targetHistoryView === 'aging') {
+      if (state.targetDetailFilter === 'ALL') return 'Todas as faixas de aging';
+      const option = getAgingTargetOptions().find(item => item.value === state.targetDetailFilter);
+      return option?.label || `Faixa ${state.targetDetailFilter}`;
+    }
+    if (state.targetHistoryView === 'document') return state.targetDetailFilter === 'CNPJ' ? 'CNPJ' : 'CPF';
+    if (state.targetHistoryView === 'due_year') return state.targetDetailFilter === 'ALL' ? 'Todos os anos de vencimento' : `Vencimento ${state.targetDetailFilter}`;
+    return 'Recuperação';
+  }
+
+  function getTargetMetricLabel() {
+    return state.targetHistoryView === 'monthly' ? BASIS_LABELS[state.targetBasis] : `Recuperado · ${getTargetDetailLabel()}`;
+  }
+
+  function getAgingTargetOptions() {
+    const values = new Map();
+    Object.values(state.agingByAgency).flat().forEach(month => {
+      Object.entries(month.agingDetails || {}).forEach(([key, detail]) => {
+        if (!values.has(key)) values.set(key, detail.label || `Faixa ${key}`);
+      });
+    });
+    return [...values.entries()].sort((a, b) => Number(a[0]) - Number(b[0])).map(([value, label]) => ({ value, label }));
+  }
+
+  function updateTargetSourceControls() {
+    const view = state.targetHistoryView;
+    const isMonthly = view === 'monthly';
+    $('#targetBasisBlock').classList.toggle('hidden', !isMonthly);
+    $('#targetDetailFilterBlock').classList.toggle('hidden', isMonthly);
+    $('#targetDetailFilter').innerHTML = '';
+    const detailLabel = $('#targetDetailFilterLabel');
+    const detail = $('#targetDetailFilter');
+    let options = [];
+    let note = '';
+    if (view === 'aging') {
+      detailLabel.textContent = 'Faixa de aging';
+      options = [{ value: 'ALL', label: 'Todas as faixas' }, ...getAgingTargetOptions()];
+      note = 'Histórico das abas individuais; não há separação entre ativo e cancelado nesta visão.';
+    } else if (view === 'document') {
+      detailLabel.textContent = 'Tipo de documento';
+      options = [{ value: 'CPF', label: 'CPF' }, { value: 'CNPJ', label: 'CNPJ' }];
+      note = 'Histórico por CPF/CNPJ das abas individuais; sem divisão entre ativo e cancelado.';
+    } else if (view === 'due_year') {
+      detailLabel.textContent = 'Ano de vencimento';
+      const years = [...new Set(state.dueYearRows.map(row => row.dueYear))].sort((a, b) => a - b);
+      options = [{ value: 'ALL', label: 'Todos os anos' }, ...years.map(year => ({ value: String(year), label: String(year) }))];
+      note = 'Base da aba “Visão Ano Vencimento”, por assessoria, mês e ano do título.';
+    }
+    if (options.length) {
+      if (!options.some(item => String(item.value) === String(state.targetDetailFilter))) state.targetDetailFilter = options[0].value;
+      detail.innerHTML = options.map(item => `<option value="${esc(item.value)}">${esc(item.label)}</option>`).join('');
+      detail.value = String(state.targetDetailFilter);
+    }
+    $('#targetSourceNote').textContent = note;
+    $('#targetSourceNote').classList.toggle('hidden', !note);
   }
 
   function makeSchedule(start, months, rate = 0) {
@@ -278,7 +465,7 @@
 
   function getTargetRows() {
     return getScenarioGroups().map(group => {
-      const baseline = getBaseline(group, state.targetBasis);
+      const baseline = getTargetBaseline(group, state.targetBasis);
       let start = baseline.value;
       const custom = state.manualTargets[manualTargetKey(group.agency)];
       if (state.targetMode === 'history_growth') {
@@ -366,6 +553,13 @@
       state.year = inferYear(fileName);
       state.agencies = [...new Set(parsedRows.map(row => row.agency))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
       state.agingByAgency = parseAgencyAging(workbook, state.agencies);
+      const dueYearSheetName = workbook.SheetNames.find(name => normalized(name) === 'VISAO ANO VENCIMENTO');
+      const dueYearRows = dueYearSheetName
+        ? window.XLSX.utils.sheet_to_json(workbook.Sheets[dueYearSheetName], { header: 1, raw: true, defval: null, blankrows: false })
+        : [];
+      state.dueYearRows = parseDueYearRows(dueYearRows, state.agencies);
+      state.targetHistoryView = 'monthly';
+      state.targetDetailFilter = 'ALL';
       state.commissionScenarios = [];
       state.activeCommissionScenarioId = null;
       state.commissionScenarioCounter = 1;
@@ -469,15 +663,59 @@
     $('#monthlyGrowthControls').classList.toggle('hidden', state.targetMode !== 'monthly_growth');
     $('#manualControls').classList.toggle('hidden', state.targetMode !== 'manual');
     $('#baselineMode').disabled = state.targetMode === 'manual';
+    $('#targetHistoryView').value = state.targetHistoryView;
+    $('#targetBasis').value = state.targetBasis;
+    updateTargetSourceControls();
+  }
+
+  function getHistoricalMonthlyValue(agency, month) {
+    if (!isMonthInCurrentWindow(agency, month)) return null;
+    if (state.targetHistoryView === 'monthly') {
+      const row = state.rows.find(item => normalized(item.agency) === normalized(agency) && item.month === month);
+      return row ? metricFromRow(row, state.targetBasis) : null;
+    }
+    if (state.targetHistoryView === 'aging') {
+      const item = getDetailedMonths(agency).find(record => record.month === month);
+      if (!item) return null;
+      if (state.targetDetailFilter === 'ALL') {
+        const values = Object.values(item.agingDetails || {}).map(detail => detail.recovered).filter(Number.isFinite);
+        return values.length ? sum(values) : null;
+      }
+      const value = item.agingDetails?.[state.targetDetailFilter]?.recovered;
+      return Number.isFinite(value) ? value : null;
+    }
+    if (state.targetHistoryView === 'document') {
+      const item = getDetailedMonths(agency).find(record => record.month === month);
+      const key = state.targetDetailFilter === 'CNPJ' ? 'cnpj' : 'cpf';
+      return Number.isFinite(item?.[key]) ? item[key] : null;
+    }
+    if (state.targetHistoryView === 'due_year') {
+      const values = state.dueYearRows.filter(row => normalized(row.agency) === normalized(agency) && row.month === month && (state.targetDetailFilter === 'ALL' || String(row.dueYear) === String(state.targetDetailFilter)))
+        .map(row => row.recovered).filter(Number.isFinite);
+      return values.length ? sum(values) : null;
+    }
+    return null;
+  }
+
+  function getTargetHistoricalSeries(targets) {
+    if (!state.hasHistory) return [];
+    const series = [];
+    for (let month = state.startMonth; month <= state.endMonth; month += 1) {
+      const value = sumOrNull(targets.map(row => getHistoricalMonthlyValue(row.agency, month)));
+      if (Number.isFinite(value)) series.push({ month, label: MONTHS[month - 1].short, value });
+    }
+    return series;
   }
 
   function buildTargetEvolutionSvg(targets) {
     const months = state.projectionMonths;
     const planned = Array.from({ length: months }, (_, index) => sumOrNull(targets.map(row => row.schedule[index])));
+    const historical = getTargetHistoricalSeries(targets);
+    const historyCount = historical.length;
     const historicReference = state.hasHistory ? sumOrNull(targets.map(row => row.baseline)) : null;
     const initialReference = sumOrNull(targets.map(row => row.schedule[0]));
     const reference = Number.isFinite(historicReference) ? historicReference : initialReference;
-    const validValues = [...planned.filter(Number.isFinite), ...(Number.isFinite(reference) ? [reference] : [])];
+    const validValues = [...planned.filter(Number.isFinite), ...historical.map(item => item.value), ...(Number.isFinite(reference) ? [reference] : [])];
     if (!validValues.length) return '<div class="chart-empty">Informe uma meta inicial para visualizar a projeção.</div>';
 
     const width = 1000;
@@ -488,30 +726,40 @@
     const bottom = 54;
     const plotW = width - left - right;
     const plotH = height - top - bottom;
+    const pointCount = Math.max(1, historyCount + months);
     const maxValue = Math.max(1, ...validValues) * 1.12;
-    const x = index => months <= 1 ? left + plotW / 2 : left + (index / (months - 1)) * plotW;
+    const x = index => pointCount <= 1 ? left + plotW / 2 : left + (index / (pointCount - 1)) * plotW;
     const y = value => top + plotH - (Math.max(0, value) / maxValue) * plotH;
-    const pathFor = values => values.map((value, index) => `${index ? 'L' : 'M'} ${x(index).toFixed(1)} ${y(Number.isFinite(value) ? value : 0).toFixed(1)}`).join(' ');
-    const targetPath = pathFor(planned);
+    const pathFor = (values, offset = 0) => values.map((value, index) => `${index ? 'L' : 'M'} ${x(index + offset).toFixed(1)} ${y(Number.isFinite(value) ? value : 0).toFixed(1)}`).join(' ');
+    const targetPath = pathFor(planned, historyCount);
+    const historyPath = historical.length > 1 ? pathFor(historical.map(item => item.value)) : '';
     const grid = Array.from({ length: 5 }, (_, index) => {
       const value = maxValue * (4 - index) / 4;
       const yy = y(value);
       const label = value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 });
       return `<g><line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" stroke="#E4EAF1" stroke-width="1"/><text x="${left-12}" y="${yy+4}" text-anchor="end" fill="#7C8998" font-size="12">${label}</text></g>`;
     }).join('');
-    const xLabels = Array.from({ length: months }, (_, index) => {
-      const show = months <= 12 || index === 0 || index === months - 1 || index % Math.ceil(months / 10) === 0;
-      return show ? `<text x="${x(index)}" y="${height-20}" text-anchor="middle" fill="#7C8998" font-size="12">M${index+1}</text>` : '';
+    const labels = [
+      ...historical.map((item, index) => ({ index, label: item.label, title: `Histórico ${item.label}` })),
+      ...planned.map((_, index) => ({ index: historyCount + index, label: `M${index + 1}`, title: `Meta mês ${index + 1}` }))
+    ];
+    const labelStep = pointCount <= 16 ? 1 : Math.ceil(pointCount / 10);
+    const xLabels = labels.map((item, index) => {
+      const show = pointCount <= 16 || index === 0 || index === labels.length - 1 || index % labelStep === 0;
+      return show ? `<text x="${x(item.index)}" y="${height-20}" text-anchor="middle" fill="#7C8998" font-size="12">${item.label}</text>` : '';
     }).join('');
-    const targetPoints = planned.map((value, index) => Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4.5" fill="#1F5DA8" stroke="#FFFFFF" stroke-width="2"><title>Mês ${index+1}: ${money(value)}</title></circle>` : '').join('');
+    const targetPoints = planned.map((value, index) => Number.isFinite(value) ? `<circle cx="${x(historyCount + index)}" cy="${y(value)}" r="4.5" fill="#1F5DA8" stroke="#FFFFFF" stroke-width="2"><title>Meta mês ${index+1}: ${money(value)}</title></circle>` : '').join('');
+    const historicalPoints = historical.map((item, index) => `<circle cx="${x(index)}" cy="${y(item.value)}" r="4" fill="#7E8A98" stroke="#FFFFFF" stroke-width="2"><title>Histórico ${item.label}: ${money(item.value)}</title></circle>`).join('');
     const referenceLine = Number.isFinite(reference)
-      ? `<line x1="${left}" y1="${y(reference)}" x2="${width-right}" y2="${y(reference)}" stroke="#E2B52D" stroke-width="3" stroke-dasharray="9 7"/><text x="${width-right}" y="${Math.max(14, y(reference)-9)}" text-anchor="end" fill="#A27B0B" font-size="12" font-weight="700">Referência ${money(reference, true)}</text>`
+      ? `<line x1="${left}" y1="${y(reference)}" x2="${width-right}" y2="${y(reference)}" stroke="#E2B52D" stroke-width="3" stroke-dasharray="9 7"/><text x="${width-right}" y="${Math.max(14, y(reference)-9)}" text-anchor="end" fill="#A27B0B" font-size="12" font-weight="700">Média ${money(reference, true)}</text>`
       : '';
-    const referenceLabel = Number.isFinite(historicReference) ? 'Referência histórica mensal' : 'Patamar inicial';
-    return `<div class="chart-legend"><span><i class="legend-blue"></i>Meta projetada</span><span><i class="legend-yellow"></i>${referenceLabel}</span></div>
-      <svg viewBox="0 0 ${width} ${height}" class="target-chart-svg" role="img" aria-label="Meta projetada ao longo de ${months} meses, comparada à referência mensal">
+    const referenceLabel = Number.isFinite(historicReference) ? 'Média histórica' : 'Patamar inicial';
+    return `<div class="chart-legend"><span><i class="legend-blue"></i>Meta projetada</span>${historical.length ? '<span><i class="legend-gray"></i>Histórico observado</span>' : ''}<span><i class="legend-yellow"></i>${referenceLabel}</span></div>
+      <svg viewBox="0 0 ${width} ${height}" class="target-chart-svg" role="img" aria-label="Histórico observado e meta projetada para ${months} meses">
         ${grid}
         ${referenceLine}
+        ${historyPath ? `<path d="${historyPath}" fill="none" stroke="#7E8A98" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+        ${historicalPoints}
         <path d="${targetPath}" fill="none" stroke="#1F5DA8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
         ${targetPoints}
         ${xLabels}
@@ -520,6 +768,7 @@
 
   function renderTargets() {
     $('#targetMode').value = state.targetMode;
+    $('#targetHistoryView').value = state.targetHistoryView;
     $('#targetBasis').value = state.targetBasis;
     $('#baselineMode').value = state.baselineMode;
     setModeControlVisibility();
@@ -529,7 +778,7 @@
     const totalProjection = sumOrNull(targets.map(row => row.totalProjection));
     const baseTotal = sumOrNull(targets.map(row => row.baseline));
     const increase = totalStart - baseTotal;
-    const basisLabel = BASIS_LABELS[state.targetBasis];
+    const basisLabel = getTargetMetricLabel();
     const modeLabel = MODE_LABELS[state.targetMode];
     $('#targetHighlight').innerHTML = `
       <div class="target-intro"><span>${esc(basisLabel)} · ${esc(modeLabel)}</span><strong>${state.targetMode === 'monthly_growth' ? `${number(state.monthlyGrowthRate, 2)}% composto ao mês` : state.targetMode === 'history_growth' ? `${number(state.growth, 1)}% sobre a referência` : 'Valores definidos manualmente'}</strong></div>
@@ -541,7 +790,7 @@
 
     $('#targetsTableBody').innerHTML = targets.length ? targets.map(row => `
       <tr>
-        <td><strong>${esc(row.agency)}</strong><small class="cell-subtext">${Number.isFinite(row.baseline) ? `${row.baselineCount} mês(es) com dado` : 'Sem histórico para este indicador'}</small></td>
+        <td><strong>${esc(row.agency)}</strong><small class="cell-subtext">${Number.isFinite(row.baseline) ? `${row.baselineCount} mês(es) com dado` : 'Sem histórico nesta visão'}</small></td>
         <td class="numeric">${money(row.baseline)}</td>
         <td class="numeric">${['manual', 'monthly_growth'].includes(state.targetMode) ? `<label class="visually-hidden" for="manual-${esc(row.agency)}">Meta inicial de ${esc(row.agency)}</label><input class="table-number-input" id="manual-${esc(row.agency)}" type="number" min="0" step="100" value="${Number.isFinite(row.targetStart) ? row.targetStart.toFixed(2) : ''}" data-manual-agency="${esc(row.agency)}" placeholder="Informe M1">` : `<strong>${money(row.targetStart)}</strong>`}</td>
         <td class="numeric">${money(row.targetFinal)}</td><td class="numeric">${money(row.totalProjection)}</td><td class="numeric ${Number.isFinite(row.increase) && row.increase >= 0 ? 'positive' : 'negative'}">${money(row.increase)}</td>
@@ -637,7 +886,7 @@
     if (!scenario) return null;
     const records = groupRows(getFilteredRows(true));
     const group = records.find(row => row.agency === scenario.agency);
-    const baselineInfo = group ? getBaseline(group, scenario.basis, 'average') : { value: null, count: 0 };
+    const baselineInfo = group ? getMonthlyBaseline(group, scenario.basis, 'average') : { value: null, count: 0 };
     const baseline = baselineInfo.value;
     const target = scenario.targetMode === 'portfolio_percent'
       ? (Number.isFinite(Number(scenario.portfolioValue)) && Number(scenario.portfolioValue) > 0 ? Number(scenario.portfolioValue) * Number(scenario.targetPercent || 0) / 100 : null)
@@ -869,16 +1118,53 @@
     document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('hidden', panel.id !== `panel-${tab}`));
   }
 
+  function getFilteredAgingHistory() {
+    const rows = [];
+    Object.entries(state.agingByAgency).forEach(([agencyKey, months]) => {
+      const agency = state.agencies.find(name => normalized(name) === agencyKey) || agencyKey;
+      if (state.agencyFilter !== 'ALL' && normalized(agency) !== normalized(state.agencyFilter)) return;
+      months.forEach(item => {
+        if (!isMonthInCurrentWindow(agency, item.month)) return;
+        Object.values(item.agingDetails || {}).forEach(detail => rows.push({ agency, month: item.month, monthLabel: MONTHS[item.month - 1].short, range: detail.label, key: detail.key, recovered: detail.recovered, commission: detail.commission }));
+      });
+    });
+    return rows.sort((a, b) => a.month - b.month || a.agency.localeCompare(b.agency, 'pt-BR') || a.key.localeCompare(b.key));
+  }
+
+  function getFilteredDocumentHistory() {
+    const rows = [];
+    Object.entries(state.agingByAgency).forEach(([agencyKey, months]) => {
+      const agency = state.agencies.find(name => normalized(name) === agencyKey) || agencyKey;
+      if (state.agencyFilter !== 'ALL' && normalized(agency) !== normalized(state.agencyFilter)) return;
+      months.forEach(item => {
+        if (!isMonthInCurrentWindow(agency, item.month)) return;
+        [['CPF', 'cpf'], ['CNPJ', 'cnpj']].forEach(([label, key]) => {
+          if (!item[`has${key === 'cpf' ? 'Cpf' : 'Cnpj'}`]) return;
+          rows.push({ agency, month: item.month, monthLabel: MONTHS[item.month - 1].short, documentType: label, recovered: item[key], commission: item[`${key}Commission`] });
+        });
+      });
+    });
+    return rows.sort((a, b) => a.month - b.month || a.agency.localeCompare(b.agency, 'pt-BR') || a.documentType.localeCompare(b.documentType));
+  }
+
+  function getFilteredDueYearHistory() {
+    return state.dueYearRows.filter(row => isMonthInCurrentWindow(row.agency, row.month) && (state.agencyFilter === 'ALL' || normalized(row.agency) === normalized(state.agencyFilter)))
+      .sort((a, b) => a.month - b.month || a.agency.localeCompare(b.agency, 'pt-BR') || a.dueYear - b.dueYear);
+  }
+
   function getExportRows() {
     const targets = getTargetRows();
     const commissionScenarios = state.commissionScenarios.map(scenario => buildCommissionScenarioResult(scenario)).filter(Boolean);
     const filteredHistory = getFilteredRows().sort((a, b) => a.month - b.month || a.agency.localeCompare(b.agency, 'pt-BR'));
-    return { targets, commissionScenarios, filteredHistory, performance: groupRows(filteredHistory) };
+    return {
+      targets, commissionScenarios, filteredHistory, performance: groupRows(filteredHistory),
+      agingHistory: getFilteredAgingHistory(), documentHistory: getFilteredDocumentHistory(), dueYearHistory: getFilteredDueYearHistory()
+    };
   }
 
   function buildWorkbook() {
     if (!window.XLSX) throw new Error('O leitor/exportador Excel não está disponível. Verifique a conexão com a biblioteca SheetJS.');
-    const { targets, commissionScenarios, filteredHistory, performance } = getExportRows();
+    const { targets, commissionScenarios, filteredHistory, performance, agingHistory, documentHistory, dueYearHistory } = getExportRows();
     const wb = window.XLSX.utils.book_new();
     const period = `${MONTHS[state.startMonth - 1].name} a ${MONTHS[state.endMonth - 1].name}${state.year ? `/${state.year}` : ''}`;
     const summary = [
@@ -886,7 +1172,7 @@
       ['Arquivo de origem', state.fileName], ['Período do histórico', period],
       ['Filtro de assessoria', state.agencyFilter === 'ALL' ? 'Todas' : state.agencyFilter],
       ['Inclusão de mês parcial', state.includePartial ? 'Sim' : 'Não'],
-      ['Indicador da meta', BASIS_LABELS[state.targetBasis]], ['Método de meta', MODE_LABELS[state.targetMode]],
+      ['Origem da meta', getTargetSourceLabel()], ['Recorte da origem', getTargetDetailLabel()], ['Indicador da meta', getTargetMetricLabel()], ['Método de meta', MODE_LABELS[state.targetMode]],
       ['Referência', state.baselineMode === 'average' ? 'Média mensal' : 'Último mês com dado'],
       ['Aumento inicial (%)', state.targetMode === 'monthly_growth' ? state.monthlyInitialGrowth : state.growth],
       ['Crescimento mensal composto (%)', state.targetMode === 'monthly_growth' ? state.monthlyGrowthRate : 'Não aplicável'],
@@ -907,8 +1193,8 @@
     ]));
     appendSheet(wb, 'Desempenho por assessoria', performanceData);
 
-    const targetData = [['Assessoria', 'Indicador', 'Referência mensal', 'Meses com dado', 'Meta mês 1', 'Meta mês final', 'Total projetado', 'Aumento inicial']];
-    targets.forEach(row => targetData.push([row.agency, BASIS_LABELS[state.targetBasis], row.baseline, row.baselineCount, row.targetStart, row.targetFinal, row.totalProjection, row.increase]));
+    const targetData = [['Assessoria', 'Origem do histórico', 'Recorte histórico', 'Indicador', 'Referência mensal', 'Meses com dado', 'Meta mês 1', 'Meta mês final', 'Total projetado', 'Aumento inicial']];
+    targets.forEach(row => targetData.push([row.agency, getTargetSourceLabel(), getTargetDetailLabel(), getTargetMetricLabel(), row.baseline, row.baselineCount, row.targetStart, row.targetFinal, row.totalProjection, row.increase]));
     appendSheet(wb, 'Metas', targetData);
 
     const evolutionData = [['Mês', ...targets.map(row => row.agency), 'Total consolidado']];
@@ -966,6 +1252,16 @@
     filteredHistory.forEach(row => historyData.push([row.agency, row.monthName, row.partial ? 'Sim' : 'Não', row.collection, row.recovered, row.active, row.canceled, row.commission, Number.isFinite(row.conversion) ? row.conversion * 100 : null, Number.isFinite(row.costRatio) ? row.costRatio * 100 : null]));
     appendSheet(wb, 'Histórico filtrado', historyData);
 
+    const agingData = [['Assessoria', 'Mês', 'Faixa de aging', 'Recuperado (R$)', 'Comissão (R$)']];
+    agingHistory.forEach(row => agingData.push([row.agency, row.monthLabel, row.range, row.recovered, row.commission]));
+    appendSheet(wb, 'Histórico por aging', agingData);
+    const documentData = [['Assessoria', 'Mês', 'Tipo de documento', 'Recuperado (R$)', 'Comissão (R$)']];
+    documentHistory.forEach(row => documentData.push([row.agency, row.monthLabel, row.documentType, row.recovered, row.commission]));
+    appendSheet(wb, 'Histórico por documento', documentData);
+    const dueYearData = [['Assessoria', 'Mês', 'Ano de vencimento', 'Recuperado (R$)', 'Comissão (R$)']];
+    dueYearHistory.forEach(row => dueYearData.push([row.agency, row.monthLabel, row.dueYear, row.recovered, row.commission]));
+    appendSheet(wb, 'Ano de vencimento', dueYearData);
+
     if (state.policy.length) appendSheet(wb, 'Política atual', [['Faixa de atraso', 'Comissão B2C (%)', 'Comissão B2B (%)'], ...state.policy.map(row => [row.range, row.b2c * 100, row.b2b * 100])]);
     return wb;
   }
@@ -986,8 +1282,22 @@
     } catch (error) { toast(error.message || 'Não foi possível gerar o Excel.', 'error'); }
   }
 
+  function aggregateDetailRows(rows, groupKeys, numericKeys, identityCells) {
+    if (!rows?.length) return '';
+    const grouped = new Map();
+    rows.forEach(row => {
+      const key = groupKeys.map(field => row[field]).join('::');
+      if (!grouped.has(key)) grouped.set(key, { sample: row, totals: Object.fromEntries(numericKeys.map(field => [field, 0])), counts: Object.fromEntries(numericKeys.map(field => [field, 0])) });
+      const item = grouped.get(key);
+      numericKeys.forEach(field => {
+        if (Number.isFinite(row[field])) { item.totals[field] += row[field]; item.counts[field] += 1; }
+      });
+    });
+    return [...grouped.values()].map(item => `<tr>${identityCells(item.sample)}${numericKeys.map(field => `<td>${item.counts[field] ? money(item.totals[field]) : '—'}</td>`).join('')}</tr>`).join('');
+  }
+
   function buildPrintReport() {
-    const { targets, commissionScenarios, filteredHistory, performance } = getExportRows();
+    const { targets, commissionScenarios, filteredHistory, performance, agingHistory, documentHistory, dueYearHistory } = getExportRows();
     const totals = {
       start: sumOrNull(targets.map(row => row.targetStart)), final: sumOrNull(targets.map(row => row.targetFinal)),
       projection: sumOrNull(targets.map(row => row.totalProjection))
@@ -1025,16 +1335,19 @@
     const historyRows = filteredHistory.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(row.monthName)}${row.partial ? ' · parcial' : ''}</td><td>${money(row.collection)}</td><td>${money(row.recovered)}</td><td>${money(row.active)}</td><td>${money(row.canceled)}</td><td>${money(row.commission)}</td><td>${percent(row.conversion)}</td><td>${percent(row.costRatio)}</td></tr>`).join('');
     $('#printReport').innerHTML = `
       <header class="print-header"><div><div class="print-kicker">SIMULADOR COBRANÇAS MASTER · ASSESSORIAS</div><h1>Simulador Cobranças Master</h1><p>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p></div><div class="print-period">${esc(period)}</div></header>
-      <section class="print-meta"><div><span>Arquivo de origem</span><strong>${esc(state.fileName || 'Cenário manual')}</strong></div><div><span>Indicador da meta</span><strong>${esc(BASIS_LABELS[state.targetBasis])}</strong></div><div><span>Método</span><strong>${esc(MODE_LABELS[state.targetMode])}</strong></div><div><span>Filtro</span><strong>${esc(state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter)}</strong></div></section>
+      <section class="print-meta"><div><span>Arquivo de origem</span><strong>${esc(state.fileName || 'Cenário manual')}</strong></div><div><span>Base da meta</span><strong>${esc(getTargetSourceLabel())} · ${esc(getTargetDetailLabel())}</strong></div><div><span>Método</span><strong>${esc(MODE_LABELS[state.targetMode])}</strong></div><div><span>Filtro</span><strong>${esc(state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter)}</strong></div></section>
       <section class="print-kpis"><div><span>Meta total mês 1</span><strong>${money(totals.start)}</strong></div><div><span>Meta mês final</span><strong>${money(totals.final)}</strong></div><div><span>Total projetado</span><strong>${money(totals.projection)}</strong></div><div><span>Cenários de comissão</span><strong>${commissionScenarios.length}</strong></div></section>
       <h2>1. Visão geral por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Meses</th><th>Bruto total</th><th>Média bruto</th><th>Ativo total</th><th>Média ativo</th><th>Cancelado total</th><th>Média cancelado</th><th>Comissão</th><th>Custo efetivo</th></tr></thead><tbody>${performanceRows || '<tr><td colspan="10">Sem histórico disponível.</td></tr>'}</tbody></table>
-      <h2>2. Metas por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Indicador</th><th>Referência</th><th>Meta mês 1</th><th>Meta mês final</th><th>Total projetado</th></tr></thead><tbody>${targets.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(BASIS_LABELS[state.targetBasis])}</td><td>${money(row.baseline)}</td><td>${money(row.targetStart)}</td><td>${money(row.targetFinal)}</td><td>${money(row.totalProjection)}</td></tr>`).join('') || '<tr><td colspan="6">Nenhuma meta configurada.</td></tr>'}</tbody></table>
+      <h2>2. Metas por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Indicador</th><th>Referência</th><th>Meta mês 1</th><th>Meta mês final</th><th>Total projetado</th></tr></thead><tbody>${targets.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(getTargetMetricLabel())}</td><td>${money(row.baseline)}</td><td>${money(row.targetStart)}</td><td>${money(row.targetFinal)}</td><td>${money(row.totalProjection)}</td></tr>`).join('') || '<tr><td colspan="6">Nenhuma meta configurada.</td></tr>'}</tbody></table>
       <h2>3. Evolução mensal consolidada</h2><div class="print-chart">${buildTargetEvolutionSvg(targets)}</div><table class="print-table"><thead><tr><th>Período</th><th>Meta total</th></tr></thead><tbody>${evolutionRows}</tbody></table>
       <h2>4. Comparação dos cenários de comissão</h2><table class="print-table"><thead><tr><th>Estudo</th><th>Assessoria</th><th>Indicador</th><th>Meta</th><th>Patamar avaliado</th><th>Recuperação adicional</th><th>Comissão atual</th><th>Nova comissão</th><th>Custo incremental</th><th>Saldo após comissão</th></tr></thead><tbody>${scenarioSummary || '<tr><td colspan="10">Nenhum cenário criado.</td></tr>'}</tbody></table>
       <h2>5. Memória de cálculo por aging de todos os cenários</h2>${scenarioDetails || '<p>Nenhum estudo de comissão salvo nesta sessão.</p>'}
       <h2>6. Política atual por aging</h2><table class="print-table"><thead><tr><th>Faixa de atraso</th><th>Comissão B2C</th><th>Comissão B2B</th></tr></thead><tbody>${policyRows || '<tr><td colspan="3">Política atual não importada.</td></tr>'}</tbody></table>
-      <h2>7. Histórico filtrado utilizado</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Mês</th><th>Cobrança</th><th>Bruto</th><th>Ativo</th><th>Cancelado</th><th>Comissão</th><th>Conversão</th><th>Custo / recuperação</th></tr></thead><tbody>${historyRows || '<tr><td colspan="9">Sem histórico importado ou registros no recorte.</td></tr>'}</tbody></table>
-      <footer class="print-footer"><strong>Premissas e limitações:</strong> os custos são estimados com base na distribuição histórica por aging e na composição geral CPF/CNPJ da assessoria. A simulação associa CPF a B2C e CNPJ a B2B como hipótese operacional, a validar com a regra interna. A planilha não cruza aging, CPF/CNPJ e situação ativa/cancelada por título e não informa o saldo da carteira cancelada por assessoria; para gatilhos percentuais, esse saldo é informado manualmente. O resultado é estimativa gerencial, não apuração individual por título. Meses parciais ${state.includePartial ? 'foram incluídos' : 'foram excluídos'}.</footer>`;
+      <h2>7. Histórico mensal utilizado</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Mês</th><th>Cobrança</th><th>Bruto</th><th>Ativo</th><th>Cancelado</th><th>Comissão</th><th>Conversão</th><th>Custo / recuperação</th></tr></thead><tbody>${historyRows || '<tr><td colspan="9">Sem histórico importado ou registros no recorte.</td></tr>'}</tbody></table>
+      <h2>8. Histórico complementar por aging</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Faixa</th><th>Recuperado no período</th><th>Comissão no período</th></tr></thead><tbody>${aggregateDetailRows(agingHistory, ['agency', 'key'], ['recovered', 'commission'], row => `<td>${esc(row.agency)}</td><td>${esc(row.range)}</td>`) || '<tr><td colspan="4">Sem dados detalhados por aging.</td></tr>'}</tbody></table>
+      <h2>9. Histórico por tipo de documento</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Documento</th><th>Recuperado no período</th><th>Comissão no período</th></tr></thead><tbody>${aggregateDetailRows(documentHistory, ['agency', 'documentType'], ['recovered', 'commission'], row => `<td>${esc(row.agency)}</td><td>${esc(row.documentType)}</td>`) || '<tr><td colspan="4">Sem dados por tipo de documento.</td></tr>'}</tbody></table>
+      <h2>10. Histórico por ano de vencimento</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Ano de vencimento</th><th>Recuperado no período</th><th>Comissão no período</th></tr></thead><tbody>${aggregateDetailRows(dueYearHistory, ['agency', 'dueYear'], ['recovered', 'commission'], row => `<td>${esc(row.agency)}</td><td>${esc(row.dueYear)}</td>`) || '<tr><td colspan="4">Sem dados por ano de vencimento.</td></tr>'}</tbody></table>
+      <footer class="print-footer"><strong>Premissas e limitações:</strong> as metas detalhadas usam as abas individuais por aging ou documento e a aba Visão Ano Vencimento. Essas visões registram recuperação e comissão, mas não separam ativo/cancelado. O histórico mensal mantém essa separação. Os custos são estimados com base na distribuição histórica por aging e na composição geral CPF/CNPJ da assessoria; a planilha não cruza aging, CPF/CNPJ e situação ativa/cancelada por título. Meses parciais ${state.includePartial ? 'foram incluídos' : 'foram excluídos'} quando identificáveis no histórico mensal.</footer>`;
   }
 
   function exportStudyPdf() {
@@ -1076,6 +1389,9 @@
     state.rows = [];
     state.policy = [];
     state.agingByAgency = {};
+    state.dueYearRows = [];
+    state.targetHistoryView = 'monthly';
+    state.targetDetailFilter = 'ALL';
     state.fileName = 'Cenário manual (sem histórico)';
     state.year = null;
     state.hasHistory = false;
@@ -1136,7 +1452,7 @@
     $('#newAgencyName').addEventListener('keydown', event => { if (event.key === 'Enter') addScenarioAgency(); });
 
     $('#clearDataBtn').addEventListener('click', () => {
-      state.rows = []; state.policy = []; state.agingByAgency = {}; state.commissionScenarios = []; state.activeCommissionScenarioId = null; state.fileName = ''; state.agencies = []; state.manualTargets = {}; state.hasHistory = false;
+      state.rows = []; state.policy = []; state.agingByAgency = {}; state.dueYearRows = []; state.commissionScenarios = []; state.activeCommissionScenarioId = null; state.fileName = ''; state.agencies = []; state.manualTargets = {}; state.hasHistory = false;
       $('#workspace').classList.add('hidden'); $('#emptyState').classList.remove('hidden'); $('#clearDataBtn').classList.add('hidden');
       $('#statusFile').textContent = '';
       setStatus('Dados removidos da memória desta sessão. Importe um histórico para continuar.');
@@ -1159,6 +1475,13 @@
     document.querySelectorAll('.tab-button').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.tab)));
     $('#goTargetsBtn').addEventListener('click', () => activateTab('targets'));
 
+    $('#targetHistoryView').addEventListener('change', event => {
+      state.targetHistoryView = event.target.value;
+      state.targetDetailFilter = state.targetHistoryView === 'document' ? 'CPF' : 'ALL';
+      updateTargetSourceControls();
+      renderTargets();
+    });
+    $('#targetDetailFilter').addEventListener('change', event => { state.targetDetailFilter = event.target.value; renderTargets(); });
     $('#targetBasis').addEventListener('change', event => { state.targetBasis = event.target.value; renderTargets(); renderCommissionComparison(getTargetRows()); });
     $('#baselineMode').addEventListener('change', event => { state.baselineMode = event.target.value; renderTargets(); renderCommissionComparison(getTargetRows()); });
     $('#targetMode').addEventListener('change', event => {

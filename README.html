@@ -113,6 +113,17 @@
 <li><strong>Último mês completo com dado:</strong> valor do mês mais recente disponível no recorte.</li>
 </ul>
 <p>Meses sem valor válido não entram no cálculo da média.</p>
+<h3>Outras bases históricas</h3>
+<p>Além da aba <code>Histórico Assessorias</code>, o seletor <strong>Base histórica</strong> disponibiliza três detalhamentos adicionais:</p>
+<ul>
+<li><strong>Aging da dívida:</strong> lê as abas individuais de cada assessoria (Agius, Cobcom, Digicob, Open e Recupere) e permite definir uma meta para uma faixa específica ou para todas as faixas. As faixas de 1 a 14 e de 15 a 20 dias permanecem separadas nesta visão.</li>
+<li><strong>Tipo de documento:</strong> utiliza os valores recuperados de CPF ou CNPJ registrados nas abas individuais.</li>
+<li><strong>Ano de vencimento:</strong> utiliza a aba <code>Visão Ano Vencimento</code> e permite selecionar um ano de vencimento específico ou todos os anos.</li>
+</ul>
+<p>Essas três fontes detalhadas registram recuperação e comissão, mas não trazem a divisão entre ativo e cancelado. Por isso, os indicadores ativo/cancelado ficam disponíveis na visão mensal; nas fontes detalhadas, as metas são calculadas sobre o valor recuperado informado pela própria aba.</p>
+<p>As abas individuais apresentam aging e tipo de documento como consolidações separadas. A planilha não contém o cruzamento entre essas dimensões; portanto, é possível definir uma meta para uma faixa de aging ou para CPF/CNPJ, mas não, por exemplo, para “CNPJ dentro da faixa de 21 a 60 dias”. A seleção de uma dimensão não deve ser interpretada como filtro da outra.</p>
+<p>O simulador utiliza os registros efetivamente disponíveis em cada aba individual e na visão por ano de vencimento. Não cria meses ou combinações ausentes, nem converte ausência de registro em recuperação zero.</p>
+<p>A média ou o último mês são calculados apenas com meses que possuem informação naquela fonte e dimensão. Os meses sem registros não são tratados como zero. O intervalo de meses e o filtro de assessoria continuam sendo respeitados.</p>
 <h3>Métodos de definição da meta</h3>
 <p><strong>Crescimento sobre o histórico</strong></p>
 <p>Aplica um percentual sobre a referência. Exemplo: referência mensal de R$ 100.000 e aumento de 10% resultam em uma meta mensal de R$ 110.000. A meta permanece constante ao longo do horizonte projetado.</p>
@@ -148,7 +159,7 @@
 </table>
 <p>A projeção pode ter de 1 a 36 meses. O aumento inicial sobre a referência é opcional quando existe histórico; sem histórico, o valor de partida deve ser digitado na tabela por assessoria.</p>
 <h3>Gráfico de evolução</h3>
-<p>O gráfico apresenta a meta consolidada mês a mês. A linha azul representa a meta projetada. A linha amarela tracejada representa a referência mensal histórica; quando não há histórico, ela representa o patamar inicial do cenário. O gráfico é atualizado conforme os métodos, taxas, valores manuais e horizonte são alterados.</p>
+<p>O gráfico apresenta o histórico observado na base selecionada e a meta consolidada projetada. A linha cinza representa os valores mensais observados, a linha azul representa a meta futura e a linha amarela tracejada representa a média histórica; quando não há histórico, ela representa o patamar inicial do cenário. O gráfico é atualizado conforme os métodos, taxas, valores manuais e horizonte são alterados.</p>
 <p>A tabela mensal logo abaixo apresenta os valores exatos usados no gráfico.</p>
 <h2>6. Comissões por aging</h2>
 <p>A área <strong>Comissões</strong> compara a política vigente com uma nova tabela condicionada ao alcance de uma meta.</p>
@@ -183,9 +194,9 @@
 <h2>7. Exportação</h2>
 <p>O botão único <strong>Exportar estudo</strong> fica centralizado na área de trabalho do módulo Assessorias.</p>
 <h3>Excel (.xlsx)</h3>
-<p>O arquivo exportado reúne abas de resumo, desempenho por assessoria, metas, evolução mensal, cenários de comissão, taxas por aging, memória de cálculo e histórico filtrado. O conteúdo considera os filtros e as configurações presentes na sessão no momento da exportação.</p>
+<p>O arquivo exportado reúne abas de resumo, desempenho por assessoria, metas, evolução mensal, cenários de comissão, taxas por aging e histórico filtrado. Também inclui as abas complementares de histórico por aging, histórico por documento e ano de vencimento, respeitando o período e a assessoria selecionados. O conteúdo considera os filtros e as configurações presentes na sessão no momento da exportação.</p>
 <h3>PDF</h3>
-<p>A opção PDF abre a janela de impressão do navegador. Selecione <strong>Salvar como PDF</strong>. O relatório inclui premissas, resultados, gráfico de evolução, cenários de comissão, detalhamento por aging e histórico filtrado.</p>
+<p>A opção PDF abre a janela de impressão do navegador. Selecione <strong>Salvar como PDF</strong>. O relatório inclui premissas, resultados, gráfico de evolução, cenários de comissão, histórico mensal, consolidados por aging e tipo de documento, e recuperação por ano de vencimento.</p>
 <h2>8. Dados, privacidade e limites</h2>
 <ul>
 <li>A aplicação não possui backend nem envia os dados para uma API própria.</li>
