@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#17457F">
   <meta name="description" content="Simulador Cobranças Master — estudos de metas e comissões.">
   <title>Simulador Cobranças Master</title>
+  <link rel="icon" type="image/png" href="./img/simbolo-master.png">
+  <link rel="apple-touch-icon" href="./img/simbolo-master.png">
   <link rel="stylesheet" href="./css/styles.css">
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="./js/app.js"></script>
@@ -14,12 +16,11 @@
   <div class="app-frame">
     <header class="topbar">
       <a class="brand" href="#inicio" aria-label="Simulador Cobranças Master - início">
-        <span class="brand-mark">M</span>
-        <span class="brand-copy"><strong>Simulador Cobranças Master</strong></span>
+        <img class="brand-logo" src="./img/logo-master.png" alt="Simulador Cobranças Master" onerror="this.hidden=true; this.nextElementSibling.hidden=false">
+        <span class="brand-fallback" hidden>Simulador Cobranças Master</span>
       </a>
       <div class="topbar-right">
         <a class="documentation-link" href="./README.html" target="_blank" rel="noopener">Documentação</a>
-        <span class="local-indicator"><i></i> Dados locais</span>
         <button class="button button-light button-sm" id="importTopBtn" type="button">＋ Importar Excel</button>
       </div>
     </header>
@@ -49,14 +50,10 @@
         </div>
       </section>
 
-      <section class="privacy-strip" id="privacyStrip" aria-label="Privacidade dos dados">
-        <span class="privacy-icon">⌑</span>
-        <p><strong>Processamento local.</strong> O Excel não é enviado ao GitHub Pages.</p>
-      </section>
 
       <div class="status-line" id="statusLine" role="status" aria-live="polite">
-        <span class="status-dot"></span><span id="statusText">Importe o histórico para iniciar uma simulação.</span>
-        <span class="status-file" id="statusFile"></span>
+        <span class="status-dot"></span><span id="statusText"></span>
+        <span class="status-file hidden" id="statusFile" aria-hidden="true"></span>
       </div>
 
       <section class="empty-state" id="emptyState">
@@ -95,7 +92,6 @@ Assessoria Gama"></textarea>
           <label class="toggle-control" for="includePartial"><input id="includePartial" type="checkbox"><span class="toggle-track"></span><span>Incluir parcial</span></label>
         </section>
 
-        <div class="data-context" id="dataContext"></div>
         <div class="study-toolbar">
           <div><strong>Estudo atual</strong><span id="studyScopeLabel">Todas as assessorias · filtros do histórico aplicados</span></div>
           <div class="study-actions export-menu-wrap">
@@ -145,26 +141,26 @@ Assessoria Gama"></textarea>
           <article class="surface-card target-builder">
             <div class="builder-heading"><div><span class="step-number">1</span><div><h3>Escolha a base da meta</h3><p>Decida qual parte da recuperação será considerada.</p></div></div></div>
             <div class="builder-grid">
-              <div class="control-block"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto</option><option value="active">Recuperado ativo</option><option value="canceled">Recuperado cancelado</option></select><small id="targetBasisHint">O indicador selecionado será usado na meta e na evolução.</small></div>
-              <div class="control-block"><label for="baselineMode">Referência histórica</label><select id="baselineMode"><option value="average">Média mensal do período</option><option value="last">Último mês completo com dado</option></select><small>A referência usa somente meses com valor disponível para o indicador.</small></div>
-              <div class="control-block"><label for="targetMode">Como deseja definir a meta?</label><select id="targetMode"><option value="history_growth">Crescimento sobre o histórico</option><option value="manual">Valor manual por assessoria</option><option value="monthly_growth">Aumento percentual a cada mês</option></select><small>Você pode alterar o método a qualquer momento.</small></div>
+              <div class="control-block"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto</option><option value="active">Recuperado ativo</option><option value="canceled">Recuperado cancelado</option></select></div>
+              <div class="control-block"><label for="baselineMode">Referência histórica</label><select id="baselineMode"><option value="average">Média mensal do período</option><option value="last">Último mês completo com dado</option></select></div>
+              <div class="control-block"><label for="targetMode">Como deseja definir a meta?</label><select id="targetMode"><option value="history_growth">Crescimento sobre o histórico</option><option value="manual">Valor manual por assessoria</option><option value="monthly_growth">Aumento percentual a cada mês</option></select></div>
             </div>
             <div class="builder-divider"></div>
             <div class="mode-controls" id="historyGrowthControls">
               <div class="control-block control-growth"><div class="growth-label"><label for="growthNumber">Aumento inicial sobre a referência</label><div class="growth-input-wrap"><input id="growthNumber" type="number" min="0" max="1000" step="0.5" value="10"><span>%</span></div></div><input id="growthSlider" type="range" min="0" max="100" step="1" value="10"><div class="range-markers"><span>0%</span><span>50%</span><span>100%</span></div></div>
-              <p class="mode-description">A meta mensal será a média histórica (ou último mês disponível) acrescida do percentual informado. O valor fica constante ao longo da projeção.</p>
+              
             </div>
             <div class="mode-controls hidden" id="monthlyGrowthControls">
-              <div class="control-block"><label for="monthlyGrowthRate">Crescimento composto mensal</label><div class="inline-suffix"><input id="monthlyGrowthRate" type="number" min="0" max="100" step="0.25" value="2"><span>% ao mês</span></div><small>Aplicado sobre a meta do mês anterior.</small></div>
-              <div class="control-block"><label for="projectionMonths">Quantidade de meses projetados</label><input id="projectionMonths" type="number" min="1" max="36" step="1" value="12"><small>Você pode projetar de 1 a 36 meses.</small></div>
-              <div class="control-block"><label for="growthNumberMonthly">Aumento inicial sobre a referência</label><div class="inline-suffix"><input id="growthNumberMonthly" type="number" min="0" max="1000" step="0.5" value="0"><span>% no mês 1</span></div><small>Opcional; depois incide o crescimento mensal composto.</small></div>
+              <div class="control-block"><label for="monthlyGrowthRate">Crescimento composto mensal</label><div class="inline-suffix"><input id="monthlyGrowthRate" type="number" min="0" max="100" step="0.25" value="2"><span>% ao mês</span></div></div>
+              <div class="control-block"><label for="projectionMonths">Quantidade de meses projetados</label><input id="projectionMonths" type="number" min="1" max="36" step="1" value="12"></div>
+              <div class="control-block"><label for="growthNumberMonthly">Aumento inicial sobre a referência</label><div class="inline-suffix"><input id="growthNumberMonthly" type="number" min="0" max="1000" step="0.5" value="0"><span>% no mês 1</span></div></div>
             </div>
             <div class="mode-controls hidden" id="manualControls">
-              <div class="control-block"><label for="manualFillValue">Valor para preencher todas as assessorias</label><div class="inline-suffix"><span>R$</span><input id="manualFillValue" type="number" min="0" step="100" placeholder="Ex.: 150000"></div><small>Depois de aplicar, você ainda poderá personalizar cada assessoria na tabela.</small></div>
-              <div class="control-block manual-apply-block"><label>Preenchimento em lote</label><button class="button button-outline" id="applyManualAllBtn" type="button">Aplicar valor a todas</button><small>O preenchimento substitui os valores manuais atuais.</small></div>
-              <p class="mode-description">No modo manual, não há obrigação de seguir a média histórica. Cada assessoria recebe uma meta fixa, editável individualmente.</p>
+              <div class="control-block"><label for="manualFillValue">Valor para preencher todas as assessorias</label><div class="inline-suffix"><span>R$</span><input id="manualFillValue" type="number" min="0" step="100" placeholder="Ex.: 150000"></div></div>
+              <div class="control-block manual-apply-block"><label>Preenchimento em lote</label><button class="button button-outline" id="applyManualAllBtn" type="button">Aplicar valor a todas</button></div>
+              
             </div>
-            <div class="builder-footer"><span id="targetModeNote">A meta será calculada a partir da referência histórica.</span><span class="coverage-note" id="targetCoverageNote"></span></div>
+            <div class="builder-footer"></div>
           </article>
 
           <div class="agency-add-strip">
@@ -179,7 +175,6 @@ Assessoria Gama"></textarea>
           <article class="surface-card table-card">
             <div class="card-heading"><div><h3>Metas por assessoria</h3><p>Edite diretamente as metas no modo manual. As demais colunas são recalculadas automaticamente.</p></div></div>
             <div class="table-wrap"><table><thead><tr><th>Assessoria</th><th class="numeric">Referência mensal</th><th class="numeric">Meta mês 1</th><th class="numeric">Meta mês final</th><th class="numeric">Total projetado</th><th class="numeric">Aumento inicial</th></tr></thead><tbody id="targetsTableBody"></tbody></table></div>
-            <p class="table-note" id="targetTableNote">A referência é calculada somente com os meses em que o indicador possui dado válido.</p>
           </article>
           <article class="surface-card table-card evolution-card">
             <div class="card-heading"><div><h3>Evolução mensal consolidada</h3><p>Soma das metas das assessorias em cada mês projetado.</p></div><span class="section-chip" id="evolutionPeriodChip">12 meses</span></div>
@@ -210,12 +205,11 @@ Assessoria Gama"></textarea>
                 <div class="control-block"><label for="commissionAgency">Assessoria avaliada</label><select id="commissionAgency"></select></div>
                 <div class="control-block"><label for="commissionTriggerBasis">Indicador para atingir a meta</label><select id="commissionTriggerBasis"><option value="canceled">Recuperado cancelado</option><option value="active">Recuperado ativo</option><option value="recovered">Recuperado bruto</option></select></div>
                 <div class="control-block"><label for="commissionTargetMode">Como definir o gatilho?</label><select id="commissionTargetMode"><option value="portfolio_percent">Percentual da carteira cancelada</option><option value="fixed_amount">Valor bruto de recuperação (R$)</option></select></div>
-                <div class="control-block" id="commissionPortfolioField"><label for="commissionPortfolioValue">Carteira cancelada da assessoria (R$)</label><input id="commissionPortfolioValue" type="number" min="0" step="1000" placeholder="Informe o saldo cancelado"><small>Este valor não existe no histórico mensal; informe o saldo atualizado da carteira.</small></div>
+                <div class="control-block" id="commissionPortfolioField"><label for="commissionPortfolioValue">Carteira cancelada da assessoria (R$)</label><input id="commissionPortfolioValue" type="number" min="0" step="1000" placeholder="Informe o saldo cancelado"></div>
                 <div class="control-block" id="commissionPercentField"><label for="commissionTargetPercent">Percentual da carteira a recuperar</label><div class="inline-suffix"><input id="commissionTargetPercent" type="number" min="0" max="100" step="0.1" value="10"><span>%</span></div></div>
                 <div class="control-block hidden" id="commissionFixedField"><label for="commissionTargetAmount">Meta de recuperação (R$)</label><input id="commissionTargetAmount" type="number" min="0" step="1000" placeholder="Ex.: 300000"></div>
               </div>
               <div class="scenario-sentence" id="commissionScenarioSentence">Selecione uma assessoria e informe a carteira para calcular a meta de desbloqueio.</div>
-              <p class="table-note scenario-method-note">A recuperação média atual usa o período selecionado. Se ela já superar o gatilho, a recuperação adicional será zero e o custo será avaliado sobre a média atual. O aging e a composição CPF/CNPJ são estimados pela distribuição histórica da assessoria.</p>
             </article>
             <article class="surface-card commission-scenario-preview">
               <div class="card-heading"><div><h3>3. Impacto estimado ao atingir o gatilho</h3><p>Projeção mensal comparada ao patamar atual.</p></div><span class="preview-tag">Cenário-alvo</span></div>
@@ -227,7 +221,6 @@ Assessoria Gama"></textarea>
           <article class="surface-card table-card commission-rates-card">
             <div class="card-heading"><div><h3>4. Monte a nova tabela por aging</h3><p>As taxas atuais são preservadas para comparação. Edite as novas taxas B2C e B2B para simular o incentivo.</p></div><span class="section-chip">Taxas editáveis</span></div>
             <div class="table-wrap"><table class="commission-rates-table"><thead><tr><th>Faixa de atraso</th><th class="numeric">Mix histórico</th><th class="numeric">Atual B2C</th><th class="numeric">Atual B2B</th><th class="numeric">Nova B2C</th><th class="numeric">Nova B2B</th></tr></thead><tbody id="commissionRatesTableBody"></tbody></table></div>
-            <p class="table-note">O mix histórico é a participação de cada aging nos valores recuperados da assessoria, no período selecionado. O sistema mantém a distribuição observada e aplica as novas taxas sobre o resultado-alvo.</p>
           </article>
 
           <article class="surface-card commission-chart-card">
@@ -249,7 +242,7 @@ Assessoria Gama"></textarea>
         </section>
       </div>
 
-      <footer class="app-footer"><span>Simulador Cobranças Master</span><a href="./README.html" target="_blank" rel="noopener">Documentação</a> <a href="./README.md" target="_blank" rel="noopener">README.md</a></footer>
+      <footer class="app-footer"><span>Simulador Cobranças Master</span><a href="./README.html" target="_blank" rel="noopener">Documentação</a></footer>
     </main>
   </div>
   <section id="printReport" aria-hidden="true"></section>

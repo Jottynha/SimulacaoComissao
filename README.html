@@ -205,28 +205,34 @@
 </code></pre>
 <p>Depois, acesse <code>http://localhost:8000</code>.</p>
 <p>Se desejar carregar o Excel automaticamente durante testes locais, crie <code>dados/</code> e coloque nele <code>historico.xlsx</code>. Não use esse recurso em um repositório público e não comite a planilha.</p>
-<h2>10. Publicar no GitHub Pages</h2>
+<h2>10. Identidade visual</h2>
+<p>Coloque os arquivos oficiais da marca dentro da pasta <code>img/</code>, mantendo exatamente estes nomes: <code>logo-master.png</code> (logo do cabeçalho) e <code>simbolo-master.png</code> (ícone da aba do navegador).</p>
+<p>Os caminhos já estão configurados no simulador. Os arquivos de imagem não vieram junto com a última versão do projeto; adicione os PNGs originais antes de publicar para que a identidade visual seja exibida.</p>
+<h2>11. Publicar no GitHub Pages</h2>
 <ol>
-<li>Envie para o repositório os arquivos <code>index.html</code>, <code>css/</code>, <code>js/</code>, <code>.gitignore</code>, <code>.nojekyll</code> e <code>README.md</code>.</li>
+<li>Envie para o repositório os arquivos <code>index.html</code>, <code>css/</code>, <code>js/</code>, <code>img/</code>, <code>.gitignore</code>, <code>.nojekyll</code> e <code>README.html</code>.</li>
 <li>Confirme que nenhum Excel, CSV ou PDF confidencial está na área de commit.</li>
 <li>No GitHub, abra <strong>Settings → Pages</strong>.</li>
 <li>Selecione a branch e a pasta que contém <code>index.html</code> como fonte de publicação.</li>
 <li>Salve e aguarde a publicação do GitHub Pages.</li>
 <li>Abra o endereço publicado e importe o arquivo confidencial diretamente pelo navegador.</li>
 </ol>
-<h2>11. Arquivos do projeto</h2>
+<h2>12. Arquivos do projeto</h2>
 <pre><code class="language-text">simulador-comissoes-assessorias/
 ├── index.html
-├── README.md
+├── README.html
 ├── .gitignore
 ├── .nojekyll
+├── img/
+│   ├── logo-master.png
+│   └── simbolo-master.png
 ├── css/
 │   └── styles.css
 └── js/
     └── app.js
 </code></pre>
 
-    <div class="doc-links"><a href="./index.html">Voltar ao simulador</a><a href="./README.md">Abrir arquivo README.md</a></div>
+    <div class="doc-links"><a href="./index.html">Voltar ao simulador</a></div>
     <footer>Documentação do projeto · Simulador Cobranças Master</footer>
   </main>
 </body>

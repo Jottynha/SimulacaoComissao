@@ -628,3 +628,13 @@ input[type=range] { width: 100%; accent-color: var(--teal); cursor: pointer; }
 .empty-state.drag-over, .page-heading.drag-over { background-color: #F3F7FC; }
 
 .section-heading p:not(.eyebrow) { display: none; }
+
+/* Identidade oficial Master */
+.brand { min-width: 0; }
+.brand-logo { display: block; width: auto; max-width: min(250px, 38vw); height: 44px; object-fit: contain; object-position: left center; }
+.brand-fallback { color: #fff; font-size: 15px; font-weight: 800; letter-spacing: -.01em; }
+.status-file { display: none !important; }
+@media (max-width: 760px) {
+  .brand-logo { max-width: min(205px, 52vw); height: 37px; }
+  .brand-fallback { font-size: 12px; }
+}

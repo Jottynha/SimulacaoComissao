@@ -350,7 +350,7 @@
       toast('Não foi possível carregar o leitor de Excel.', 'error');
       return;
     }
-    setStatus('Lendo a planilha localmente…');
+    setStatus('Importando histórico…');
     $('#statusFile').textContent = fileName;
     try {
       const workbook = window.XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -376,15 +376,9 @@
       $('#emptyState').classList.add('hidden');
       $('#workspace').classList.remove('hidden');
       $('#clearDataBtn').classList.remove('hidden');
-      $('#statusFile').textContent = `${fileName} · ${parsedRows.length} registros`;
-      const partialCount = parsedRows.filter(row => row.partial).length;
-      const partialMessage = partialCount ? ` ${partialCount} registro(s) parcial(is) foram identificados e estão excluídos por padrão.` : '';
-      setStatus(`Histórico importado: ${state.agencies.length} assessorias e ${parsedRows.length} registros mensais.${partialMessage}`, 'success');
-      const first = Math.min(...parsedRows.map(row => row.month));
-      const last = Math.max(...parsedRows.map(row => row.month));
-      const yearText = state.year ? ` · referência ${state.year} (inferida do nome do arquivo)` : ' · ano não informado no nome do arquivo';
+      $('#statusFile').textContent = ''; 
+      setStatus('Histórico carregado.', 'success');
       $('#historyFilters').classList.remove('hidden');
-      $('#dataContext').innerHTML = `<strong>${esc(fileName)}</strong> · ${state.agencies.length} assessorias · ${MONTHS[first - 1].short} a ${MONTHS[last - 1].short}${yearText} · ${partialCount} linha(s) parcial(is)`;
       renderAll();
       activateModule('assessorias');
       activateTab('overview');
@@ -398,7 +392,7 @@
 
   async function importWorkbook(file) {
     if (!file) return;
-    setStatus('Lendo a planilha localmente…');
+    setStatus('Importando histórico…');
     $('#statusFile').textContent = file.name;
     try { await processWorkbookBuffer(await file.arrayBuffer(), file.name); }
     catch (error) {
@@ -475,11 +469,6 @@
     $('#monthlyGrowthControls').classList.toggle('hidden', state.targetMode !== 'monthly_growth');
     $('#manualControls').classList.toggle('hidden', state.targetMode !== 'manual');
     $('#baselineMode').disabled = state.targetMode === 'manual';
-    $('#targetModeNote').textContent = state.targetMode === 'manual'
-      ? 'As metas são livres; a referência histórica permanece visível apenas para comparação.'
-      : state.targetMode === 'monthly_growth'
-        ? (!state.hasHistory ? 'Sem histórico: informe o valor inicial (mês 1) de cada assessoria na tabela; o crescimento composto será aplicado a partir dele.' : 'A meta começa pela referência ajustada e cresce de forma composta mês a mês.')
-        : 'A meta mensal é a referência histórica acrescida do percentual inicial.';
   }
 
   function buildTargetEvolutionSvg(targets) {
@@ -540,16 +529,8 @@
     const totalProjection = sumOrNull(targets.map(row => row.totalProjection));
     const baseTotal = sumOrNull(targets.map(row => row.baseline));
     const increase = totalStart - baseTotal;
-    const validBaselines = targets.filter(row => Number.isFinite(row.baseline));
-    const covered = validBaselines.reduce((acc, row) => acc + row.baselineCount, 0);
-    const available = targets.reduce((acc, row) => acc + row.monthCount, 0);
-    const enteredTargets = targets.filter(row => Number.isFinite(row.targetStart)).length;
     const basisLabel = BASIS_LABELS[state.targetBasis];
     const modeLabel = MODE_LABELS[state.targetMode];
-    $('#targetBasisHint').textContent = 'Meses sem valor para este indicador são desconsiderados da média, não tratados como zero.';
-    $('#targetCoverageNote').textContent = !state.hasHistory
-      ? `${enteredTargets} de ${targets.length} assessoria(s) com meta inicial informada.`
-      : `${covered} mês(es) com indicador disponível entre ${available} registro(s) no recorte.`;
     $('#targetHighlight').innerHTML = `
       <div class="target-intro"><span>${esc(basisLabel)} · ${esc(modeLabel)}</span><strong>${state.targetMode === 'monthly_growth' ? `${number(state.monthlyGrowthRate, 2)}% composto ao mês` : state.targetMode === 'history_growth' ? `${number(state.growth, 1)}% sobre a referência` : 'Valores definidos manualmente'}</strong></div>
       <div class="target-kpi"><span>Meta consolidada · mês 1</span><strong>${money(totalStart, true)}</strong></div>
@@ -566,12 +547,6 @@
         <td class="numeric">${money(row.targetFinal)}</td><td class="numeric">${money(row.totalProjection)}</td><td class="numeric ${Number.isFinite(row.increase) && row.increase >= 0 ? 'positive' : 'negative'}">${money(row.increase)}</td>
       </tr>`).join('') : '<tr><td colspan="6">Sem dados para os filtros selecionados.</td></tr>';
 
-    const first = state.targetMode === 'monthly_growth' ? state.monthlyInitialGrowth : state.growth;
-    $('#targetTableNote').textContent = state.targetMode === 'manual'
-      ? 'A meta manual é aplicada como valor mensal constante. As referências históricas são exibidas para comparação e não limitam os valores digitados.'
-      : state.targetMode === 'monthly_growth'
-        ? (!state.hasHistory ? `Informe a meta inicial no mês 1 para cada assessoria. A partir dela, o valor cresce ${number(state.monthlyGrowthRate, 2)}% sobre o mês anterior.` : `O mês 1 começa com ${number(first, 2)}% sobre a referência e os meses seguintes crescem ${number(state.monthlyGrowthRate, 2)}% sobre o mês anterior.`)
-        : 'A meta é constante ao longo dos meses projetados; a projeção total corresponde à meta mensal multiplicada pelo número de meses.';
 
     $('#evolutionPeriodChip').textContent = `${state.projectionMonths} mês(es)`;
     $('#evolutionTableHead').innerHTML = `<th>Indicador</th>${Array.from({ length: state.projectionMonths }, (_, index) => `<th class="numeric">Mês ${index + 1}</th>`).join('')}<th class="numeric">Total</th>`;
@@ -847,9 +822,6 @@
 
   function renderAll() {
     $('#historyFilters').classList.toggle('hidden', !state.hasHistory);
-    $('#dataContext').innerHTML = state.hasHistory
-      ? $('#dataContext').innerHTML
-      : '<strong>Cenário manual sem histórico.</strong> Metas e comissões serão calculadas a partir dos valores informados; não há comparação histórica.';
     const groups = getScenarioGroups();
     updateMetrics(groups);
     renderOverview(groups);
@@ -870,7 +842,6 @@
     });
 
     $('#assessoriasHeading').classList.toggle('hidden', !isAssessorias);
-    $('#privacyStrip').classList.toggle('hidden', !isAssessorias);
     $('#statusLine').classList.toggle('hidden', !isAssessorias);
     $('#emptyState').classList.toggle('hidden', !isAssessorias || state.agencies.length > 0);
     $('#workspace').classList.toggle('hidden', !isAssessorias || state.agencies.length === 0);
@@ -1125,9 +1096,8 @@
     $('#emptyState').classList.add('hidden');
     $('#workspace').classList.remove('hidden');
     $('#clearDataBtn').classList.remove('hidden');
-    $('#dataContext').innerHTML = '<strong>Cenário manual sem histórico.</strong> Metas e comissões serão calculadas a partir dos valores informados; não há comparação histórica.';
     $('#statusFile').textContent = '';
-    setStatus(`Cenário livre criado com ${state.agencies.length} assessoria(s). Informe as metas na tabela.`, 'success');
+    setStatus('Cenário livre pronto.', 'success');
     renderAll();
     activateModule('assessorias');
     activateTab('targets');
