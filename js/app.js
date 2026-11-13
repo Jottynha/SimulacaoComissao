@@ -14,11 +14,11 @@
     { n: 11, short: 'NOV', name: 'Novembro' }, { n: 12, short: 'DEZ', name: 'Dezembro' }
   ];
   const MONTH_LOOKUP = Object.fromEntries(MONTHS.map(month => [month.short, month.n]));
+  const FULL_MONTH_LOOKUP = { JANEIRO: 1, FEVEREIRO: 2, MARCO: 3, ABRIL: 4, MAIO: 5, JUNHO: 6, JULHO: 7, AGOSTO: 8, SETEMBRO: 9, OUTUBRO: 10, NOVEMBRO: 11, DEZEMBRO: 12 };
   const $ = selector => document.querySelector(selector);
 
   const BASIS_LABELS = {
-    recovered: 'Recuperado bruto', active: 'Recuperado ativo',
-    canceled: 'Recuperado cancelado', combined: 'Ativo + cancelado', target: 'Mesmo indicador da meta'
+    recovered: 'Recuperado bruto', active: 'Recuperado ativo', canceled: 'Recuperado cancelado'
   };
   const MODE_LABELS = {
     history_growth: 'Crescimento sobre o histórico',
@@ -32,7 +32,8 @@
     baselineMode: 'average', targetBasis: 'recovered', targetMode: 'history_growth',
     growth: 10, monthlyGrowthRate: 2, monthlyInitialGrowth: 0, projectionMonths: 12,
     manualTargets: {}, manualDefault: null,
-    globalRules: null, rulesByAgency: {}, ruleScope: 'ALL', activeTab: 'overview'
+    activeTab: 'overview',
+    agingByAgency: {}, commissionScenarios: [], activeCommissionScenarioId: null, commissionScenarioCounter: 1
   };
 
   const money = (value, compact = false) => {
@@ -42,7 +43,7 @@
     return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 });
   };
   const number = (value, digits = 0) => (Number(value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const percent = (value, digits = 2) => Number.isFinite(Number(value)) ? `${number(Number(value) * 100, digits)}%` : '—';
+  const percent = (value, digits = 2) => value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? '—' : `${number(Number(value) * 100, digits)}%`;
   const percentPoints = (value, digits = 2) => `${number(Number(value) || 0, digits)}%`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const normalized = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
@@ -125,6 +126,59 @@
     return data;
   }
 
+
+  function mapPolicyAgingBucket(label) {
+    const value = normalized(label).replace(/\s+/g, ' ');
+    if (value.includes('NO VENCIMENTO') || value.includes('PAGAMENTO EM DIA') || value.startsWith('00')) return '00';
+    if (value.includes('01-20') || value.includes('01 - 20') || value.includes('01 A 20')) return '01-20';
+    if (value.includes('ACIMA DE 1800') || value.includes('MAIOR QUE 1800')) return '1800+';
+    const range = value.match(/(\d{1,4})\s*[-–]\s*(\d{1,4})/);
+    return range ? `${Number(range[1])}-${Number(range[2])}` : null;
+  }
+
+  function mapDetailAgingBucket(label) {
+    const value = normalized(label);
+    if (value.includes('PAGAMENTO EM DIA') || value.startsWith('00')) return '00';
+    if (value.includes('MAIOR QUE 1800') || value.includes('ACIMA DE 1800')) return '1800+';
+    if (value.includes('01 A 14') || value.includes('15 A 20')) return '01-20';
+    const range = value.match(/^\s*\d+\s*[-–]\s*(\d{1,4})\s*(?:A|[-–])\s*(\d{1,4})/);
+    return range ? `${Number(range[1])}-${Number(range[2])}` : null;
+  }
+
+  function parseAgencyAgingRows(rows) {
+    const byMonth = new Map();
+    (rows || []).forEach(row => {
+      const monthRaw = normalized(row?.[0]).split(/[\s(]/)[0];
+      const month = MONTH_LOOKUP[monthRaw] || FULL_MONTH_LOOKUP[monthRaw];
+      const bucket = mapDetailAgingBucket(row?.[1]);
+      if (!month) return;
+      if (!byMonth.has(month)) byMonth.set(month, { month, amounts: {}, cpf: 0, cnpj: 0, hasCpf: false, hasCnpj: false });
+      const data = byMonth.get(month);
+      if (bucket) data.amounts[bucket] = (data.amounts[bucket] || 0) + parseNumeric(row?.[2]);
+      const contractType = normalized(row?.[5]);
+      if (contractType === 'CPF') {
+        data.cpf += parseNumeric(row?.[6]);
+        data.hasCpf = true;
+      } else if (contractType === 'CNPJ') {
+        data.cnpj += parseNumeric(row?.[6]);
+        data.hasCnpj = true;
+      }
+    });
+    return [...byMonth.values()].sort((a, b) => a.month - b.month);
+  }
+
+  function parseAgencyAging(workbook, agencies) {
+    const parsed = {};
+    agencies.forEach(agency => {
+      const sheetName = workbook.SheetNames.find(name => normalized(name) === normalized(agency));
+      if (!sheetName) return;
+      const sheetRows = window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: null, blankrows: false });
+      const months = parseAgencyAgingRows(sheetRows);
+      if (months.length) parsed[normalized(agency)] = months;
+    });
+    return parsed;
+  }
+
   function parsePolicyRows(rows) {
     let headerRow = -1;
     let startCol = -1;
@@ -139,7 +193,7 @@
       const label = String(row[startCol] ?? '').trim();
       if (!label) break;
       if (typeof row[startCol + 1] === 'string' && normalized(row[startCol + 1]).includes('COMISSAO')) break;
-      result.push({ range: label, b2c: parseNumeric(row[startCol + 1]), b2b: parseNumeric(row[startCol + 2]) });
+      result.push({ range: label, key: mapPolicyAgingBucket(label), b2c: parseNumeric(row[startCol + 1]), b2b: parseNumeric(row[startCol + 2]) });
     }
     return result;
   }
@@ -197,7 +251,6 @@
     if (basis === 'recovered') return Number.isFinite(row.recovered) ? row.recovered : null;
     if (basis === 'active') return Number.isFinite(row.active) ? row.active : null;
     if (basis === 'canceled') return Number.isFinite(row.canceled) ? row.canceled : null;
-    if (basis === 'combined') return Number.isFinite(row.active) && Number.isFinite(row.canceled) ? row.active + row.canceled : null;
     return null;
   }
 
@@ -245,89 +298,6 @@
     });
   }
 
-  function projectedMetricForBasis(targetRow, basis, monthIndex = 0) {
-    const actualBasis = basis === 'target' ? state.targetBasis : basis;
-    if (actualBasis === state.targetBasis) return targetRow.schedule[monthIndex] ?? null;
-    const baseline = getBaseline(targetRow, actualBasis);
-    if (!Number.isFinite(baseline.value)) return null;
-    if (state.targetMode === 'manual') return baseline.value;
-    const initialGrowth = state.targetMode === 'monthly_growth' ? state.monthlyInitialGrowth : state.growth;
-    const start = baseline.value * (1 + initialGrowth / 100);
-    return start * Math.pow(1 + (state.targetMode === 'monthly_growth' ? state.monthlyGrowthRate : 0) / 100, monthIndex);
-  }
-
-  function getBaselineRate(agency) {
-    const source = state.rows.filter(row => row.agency === agency && row.month >= state.startMonth && row.month <= state.endMonth && !row.partial && Number.isFinite(row.commission));
-    const recovery = sum(source.map(row => row.recovered));
-    const commission = sum(source.map(row => row.commission));
-    return recovery > 0 ? commission / recovery : 0;
-  }
-
-  function getGlobalBaselineRate() {
-    const source = state.rows.filter(row => row.month >= state.startMonth && row.month <= state.endMonth && !row.partial && Number.isFinite(row.commission));
-    const recovery = sum(source.map(row => row.recovered));
-    const commission = sum(source.map(row => row.commission));
-    return recovery > 0 ? commission / recovery : 0;
-  }
-
-  function getGlobalMonthlyRecovered() {
-    return groupRows(getFilteredRows(true)).reduce((total, group) => total + (group.avgRecovered || 0), 0);
-  }
-
-  function makeDefaultRules(rate, threshold) {
-    const ratePoints = rate * 100;
-    return {
-      mode: 'progressive', tiers: [{ min: 0, rate: ratePoints }],
-      commissionBasis: 'target',
-      trigger: { basis: 'target', threshold: Math.max(0, threshold || 0), baseRate: ratePoints, bonusRate: 1 }
-    };
-  }
-  function initializeRules() {
-    state.globalRules = makeDefaultRules(getGlobalBaselineRate(), getGlobalMonthlyRecovered());
-    state.rulesByAgency = {};
-    state.ruleScope = 'ALL';
-  }
-  function cloneRules(rules) {
-    return { mode: rules.mode, tiers: rules.tiers.map(tier => ({ min: tier.min, rate: tier.rate })), commissionBasis: rules.commissionBasis || 'target', trigger: { ...rules.trigger } };
-  }
-  function getEditorRules() {
-    if (state.ruleScope !== 'ALL' && state.rulesByAgency[state.ruleScope]) return state.rulesByAgency[state.ruleScope];
-    return state.globalRules;
-  }
-  function getRulesForAgency(agency) { return state.rulesByAgency[agency] || state.globalRules; }
-  function ensureEditableRules() {
-    if (state.ruleScope !== 'ALL' && !state.rulesByAgency[state.ruleScope]) state.rulesByAgency[state.ruleScope] = cloneRules(state.globalRules);
-    return getEditorRules();
-  }
-
-  function calculateCommission(baseValue, rules, triggerValue = null) {
-    if (!Number.isFinite(baseValue)) return { amount: null, rate: null, reached: false };
-    const value = Math.max(0, Number(baseValue) || 0);
-    if (rules.mode === 'threshold_bonus') {
-      const trigger = rules.trigger || {};
-      const threshold = Number(trigger.threshold) || 0;
-      const reached = threshold > 0 && Number.isFinite(triggerValue) && triggerValue >= threshold;
-      const rate = (Number(trigger.baseRate) || 0) + (reached ? (Number(trigger.bonusRate) || 0) : 0);
-      return { amount: value * rate / 100, rate, reached };
-    }
-    const tiers = [...rules.tiers].sort((a, b) => a.min - b.min);
-    if (!tiers.length || value <= 0) return { amount: 0, rate: 0, reached: false };
-    if (rules.mode === 'attained') {
-      let selected = tiers[0];
-      tiers.forEach(tier => { if (value >= tier.min) selected = tier; });
-      return { amount: value * selected.rate / 100, rate: selected.rate, reached: false };
-    }
-    let total = 0;
-    for (let index = 0; index < tiers.length; index += 1) {
-      const tier = tiers[index];
-      const next = tiers[index + 1];
-      const low = Math.max(0, tier.min);
-      const high = next ? Math.min(value, next.min) : value;
-      total += Math.max(0, high - low) * tier.rate / 100;
-      if (value <= (next ? next.min : value)) break;
-    }
-    return { amount: total, rate: value > 0 ? total / value * 100 : 0, reached: false };
-  }
 
   function setStatus(message, type = '') {
     const line = $('#statusLine');
@@ -346,14 +316,16 @@
 
   function refreshAgencyOptions() {
     const selectedAgency = state.agencyFilter;
-    const selectedScope = state.ruleScope;
     const options = ['<option value="ALL">Todas as assessorias</option>', ...state.agencies.map(name => `<option value="${esc(name)}">${esc(name)}</option>`)].join('');
     $('#agencyFilter').innerHTML = options;
-    $('#ruleScope').innerHTML = options;
     $('#agencyFilter').value = state.agencies.includes(selectedAgency) ? selectedAgency : 'ALL';
-    $('#ruleScope').value = selectedScope === 'ALL' || state.agencies.includes(selectedScope) ? selectedScope : 'ALL';
     state.agencyFilter = $('#agencyFilter').value;
-    state.ruleScope = $('#ruleScope').value;
+    const commissionSelect = $('#commissionAgency');
+    if (commissionSelect) {
+      const previous = commissionSelect.value;
+      commissionSelect.innerHTML = state.agencies.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+      if (state.agencies.includes(previous)) commissionSelect.value = previous;
+    }
   }
 
   function populateFilters() {
@@ -367,7 +339,6 @@
     $('#startMonth').value = String(state.startMonth);
     $('#endMonth').value = String(state.endMonth);
     $('#agencyFilter').value = 'ALL';
-    $('#ruleScope').value = 'ALL';
     $('#includePartial').checked = false;
     state.agencyFilter = 'ALL';
     state.includePartial = false;
@@ -394,10 +365,14 @@
       state.fileName = fileName;
       state.year = inferYear(fileName);
       state.agencies = [...new Set(parsedRows.map(row => row.agency))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      state.agingByAgency = parseAgencyAging(workbook, state.agencies);
+      state.commissionScenarios = [];
+      state.activeCommissionScenarioId = null;
+      state.commissionScenarioCounter = 1;
       state.manualTargets = {};
       state.manualDefault = null;
       populateFilters();
-      initializeRules();
+      initializeCommissionScenarios();
       $('#emptyState').classList.add('hidden');
       $('#workspace').classList.remove('hidden');
       $('#clearDataBtn').classList.remove('hidden');
@@ -410,7 +385,6 @@
       const yearText = state.year ? ` · referência ${state.year} (inferida do nome do arquivo)` : ' · ano não informado no nome do arquivo';
       $('#historyFilters').classList.remove('hidden');
       $('#dataContext').innerHTML = `<strong>${esc(fileName)}</strong> · ${state.agencies.length} assessorias · ${MONTHS[first - 1].short} a ${MONTHS[last - 1].short}${yearText} · ${partialCount} linha(s) parcial(is)`;
-      $('#policyFoot').textContent = state.policy.length ? `A planilha forneceu ${state.policy.length} faixas de atraso. Os percentuais são exibidos como referência da política registrada no arquivo, sem aplicação automática nos novos cenários.` : 'Não foi localizada uma tabela de política de comissão por atraso na aba de histórico.';
       renderAll();
       activateTab('overview');
       toast('Histórico carregado. As simulações estão prontas.');
@@ -524,9 +498,7 @@
     const enteredTargets = targets.filter(row => Number.isFinite(row.targetStart)).length;
     const basisLabel = BASIS_LABELS[state.targetBasis];
     const modeLabel = MODE_LABELS[state.targetMode];
-    $('#targetBasisHint').textContent = state.targetBasis === 'combined'
-      ? 'A soma só é calculada quando ativo e cancelado estão preenchidos no mesmo mês.'
-      : 'Meses sem valor para este indicador são desconsiderados da média, não tratados como zero.';
+    $('#targetBasisHint').textContent = 'Meses sem valor para este indicador são desconsiderados da média, não tratados como zero.';
     $('#targetCoverageNote').textContent = !state.hasHistory
       ? `${enteredTargets} de ${targets.length} assessoria(s) com meta inicial informada.`
       : `${covered} mês(es) com indicador disponível entre ${available} registro(s) no recorte.`;
@@ -557,79 +529,262 @@
     $('#evolutionTableBody').innerHTML = `<tr><td><strong>${esc(basisLabel)}</strong></td>${monthlyTotals.map(value => `<td class="numeric">${money(value)}</td>`).join('')}<td class="numeric"><strong>${money(totalProjection)}</strong></td></tr>`;
   }
 
-  function renderRuleEditor() {
-    const rules = getEditorRules();
-    $('#commissionMode').value = rules.mode;
-    $('#commissionBasis').value = rules.commissionBasis || 'target';
-    const triggerMode = rules.mode === 'threshold_bonus';
-    $('#tierSettings').classList.toggle('hidden', triggerMode);
-    $('#triggerSettings').classList.toggle('hidden', !triggerMode);
-    $('#addTierBtn').disabled = triggerMode;
-    $('#modeExplainer').textContent = rules.mode === 'progressive'
-      ? 'Cada percentual incide somente sobre a parcela do valor que estiver dentro daquela faixa.'
-      : rules.mode === 'attained'
-        ? 'O percentual da faixa mais alta alcançada incide sobre todo o valor usado como base de comissão.'
-        : 'Ao alcançar o gatilho, o acréscimo percentual é aplicado sobre toda a base de comissão do período.';
-    const sorted = [...rules.tiers].sort((a, b) => a.min - b.min);
-    $('#tiersTableBody').innerHTML = sorted.map((tier, index) => `
-      <tr><td><input type="number" min="0" step="1000" value="${Number(tier.min).toFixed(2)}" data-tier-index="${index}" data-tier-field="min" aria-label="Valor inicial da faixa ${index + 1}"></td>
-      <td><input class="rate-input" type="number" min="0" max="100" step="0.05" value="${Number(tier.rate).toFixed(3)}" data-tier-index="${index}" data-tier-field="rate" aria-label="Percentual da faixa ${index + 1}"></td>
-      <td><button class="tier-delete" type="button" data-delete-tier="${index}" aria-label="Remover faixa ${index + 1}" ${sorted.length === 1 ? 'disabled' : ''}>×</button></td></tr>`).join('');
-    $('#triggerBasis').value = rules.trigger.basis || 'target';
-    $('#triggerThreshold').value = Number(rules.trigger.threshold || 0).toFixed(2);
-    $('#triggerBaseRate').value = Number(rules.trigger.baseRate || 0).toFixed(3);
-    $('#triggerBonusRate').value = Number(rules.trigger.bonusRate || 0).toFixed(3);
-    const refRate = state.ruleScope === 'ALL' ? getGlobalBaselineRate() : getBaselineRate(state.ruleScope);
-    const label = state.ruleScope === 'ALL' ? 'Média ponderada histórica de todas as assessorias' : `Referência histórica de ${esc(state.ruleScope)}`;
-    $('#referenceRate').innerHTML = `${label}: <strong>${percent(refRate)}</strong> de comissão efetiva sobre a recuperação bruta em meses completos. ${state.ruleScope !== 'ALL' && !state.rulesByAgency[state.ruleScope] ? 'A tabela individual ainda herda o modelo geral.' : ''}`;
-    $('#triggerReference').innerHTML = `A taxa-base pode partir da referência histórica de <strong>${percent(refRate)}</strong>, mas é independente dela e pode ser alterada livremente.`;
+  const DEFAULT_COMMISSION_SCENARIO = {
+    basis: 'canceled', targetMode: 'portfolio_percent', portfolioValue: null, targetPercent: 10, targetAmount: null
+  };
+
+  function getActiveCommissionScenario() {
+    return state.commissionScenarios.find(item => item.id === state.activeCommissionScenarioId) || state.commissionScenarios[0] || null;
   }
 
-  function buildCommissionResults(targets) {
-    return targets.map(row => {
-      const rules = getRulesForAgency(row.agency);
-      const commissionBasisValue = projectedMetricForBasis(row, rules.commissionBasis || 'target', 0);
-      const triggerBasisValue = projectedMetricForBasis(row, rules.trigger.basis || 'target', 0);
-      const calculation = calculateCommission(commissionBasisValue, rules, triggerBasisValue);
-      const historical = row.avgCommission;
-      const delta = Number.isFinite(calculation.amount) && Number.isFinite(historical) ? calculation.amount - historical : null;
-      return {
-        ...row, rules, commissionBasisValue, triggerBasisValue,
-        simulated: calculation.amount, effectiveRate: calculation.rate, triggerReached: calculation.reached,
-        historical, delta, net: Number.isFinite(commissionBasisValue) && Number.isFinite(calculation.amount) ? commissionBasisValue - calculation.amount : null
-      };
+  function makeCommissionScenario(agency, name = null) {
+    const id = `fee-${state.commissionScenarioCounter++}`;
+    const label = name || `${agency || 'Assessoria'} — nova tabela`;
+    return {
+      id, name: label, agency: agency || state.agencies[0] || '',
+      basis: DEFAULT_COMMISSION_SCENARIO.basis,
+      targetMode: DEFAULT_COMMISSION_SCENARIO.targetMode,
+      portfolioValue: null, targetPercent: DEFAULT_COMMISSION_SCENARIO.targetPercent, targetAmount: null,
+      rates: state.policy.map(row => ({
+        key: row.key || mapPolicyAgingBucket(row.range), range: row.range,
+        newB2C: Number(row.b2c || 0) * 100, newB2B: Number(row.b2b || 0) * 100
+      }))
+    };
+  }
+
+  function initializeCommissionScenarios() {
+    state.commissionScenarios = [];
+    state.activeCommissionScenarioId = null;
+    if (state.agencies.length) {
+      const scenario = makeCommissionScenario(state.agencies[0], `${state.agencies[0]} — incentivo cancelado 10%`);
+      state.commissionScenarios.push(scenario);
+      state.activeCommissionScenarioId = scenario.id;
+    }
+    refreshAgencyOptions();
+    renderCommissionModule();
+  }
+
+
+  function getAgingProfile(agency) {
+    const months = state.agingByAgency[normalized(agency)] || [];
+    const totals = {};
+    let cpf = 0, cnpj = 0, cpfFound = false, cnpjFound = false, includedMonths = 0;
+    months.forEach(item => {
+      if (item.month < state.startMonth || item.month > state.endMonth) return;
+      const isPartial = state.rows.some(row => row.agency === agency && row.month === item.month && row.partial);
+      if (isPartial && !state.includePartial) return;
+      includedMonths += 1;
+      Object.entries(item.amounts || {}).forEach(([key, value]) => { totals[key] = (totals[key] || 0) + value; });
+      if (item.hasCpf) { cpf += item.cpf; cpfFound = true; }
+      if (item.hasCnpj) { cnpj += item.cnpj; cnpjFound = true; }
     });
+    const totalRecovered = sum(Object.values(totals));
+    if (!includedMonths || totalRecovered <= 0) return null;
+    const mixTotal = (cpfFound ? cpf : 0) + (cnpjFound ? cnpj : 0);
+    const cpfShare = mixTotal > 0 && cpfFound ? cpf / mixTotal : (cpfFound ? 1 : 0);
+    const cnpjShare = mixTotal > 0 && cnpjFound ? cnpj / mixTotal : (cnpjFound ? 1 : 0);
+    return { totals, totalRecovered, cpfShare, cnpjShare, includedMonths, hasContractMix: mixTotal > 0 };
   }
 
-  function renderCommissionComparison(targets) {
-    const result = buildCommissionResults(targets);
-    $('#commissionTableBody').innerHTML = result.length ? result.map(row => `
-      <tr><td><strong>${esc(row.agency)}</strong></td><td class="numeric">${money(row.commissionBasisValue)}</td><td class="numeric">${row.rules.mode === 'threshold_bonus' ? `<span class="trigger-status ${row.triggerReached ? 'reached' : 'not-reached'}">${row.triggerReached ? 'Atingido' : 'Não atingido'}</span><small class="cell-subtext">${money(row.triggerBasisValue)} / ${money(row.rules.trigger.threshold)}</small>` : 'Não aplicável'}</td>
-      <td class="numeric">${percentPoints(row.effectiveRate)}</td><td class="numeric"><strong>${money(row.simulated)}</strong></td><td class="numeric ${Number.isFinite(row.delta) && row.delta > 0 ? 'negative' : 'positive'}">${Number.isFinite(row.delta) && row.delta > 0 ? '+' : ''}${money(row.delta)}</td><td class="numeric">${money(row.net)}</td></tr>`).join('') : '<tr><td colspan="7">Sem dados para os filtros selecionados.</td></tr>';
-
-    const selected = state.ruleScope === 'ALL' ? result : result.filter(row => row.agency === state.ruleScope);
-    const base = sumOrNull(selected.map(row => row.commissionBasisValue));
-    const historical = sumOrNull(selected.map(row => row.historical));
-    const simulated = sumOrNull(selected.map(row => row.simulated));
-    const delta = Number.isFinite(simulated) && Number.isFinite(historical) ? simulated - historical : null;
-    const net = Number.isFinite(base) && Number.isFinite(simulated) ? base - simulated : null;
-    const anyMissing = selected.some(row => !Number.isFinite(row.commissionBasisValue));
-    $('#commissionPreviewMetrics').innerHTML = `
-      <div class="preview-line"><span>Base de comissão projetada</span><strong>${money(base)}</strong></div>
-      <div class="preview-line"><span>Comissão histórica média</span><strong>${money(historical)}</strong></div>
-      <div class="preview-line primary"><span>Comissão no novo cenário</span><strong>${money(simulated)}</strong></div>
-      <div class="preview-line"><span>Variação frente ao histórico</span><strong class="${delta > 0 ? 'negative' : 'positive'}">${delta > 0 ? '+' : ''}${money(delta)}</strong></div>
-      <div class="preview-line"><span>Base líquida após comissão</span><strong>${money(net)}</strong></div>`;
-    const scope = state.ruleScope === 'ALL' ? 'Todas as assessorias' : state.ruleScope;
-    const mode = getEditorRules().mode === 'threshold_bonus' ? 'gatilho por resultado' : 'faixas de comissão';
-    $('#commissionPreviewFoot').textContent = `${scope}: ${Number.isFinite(base) && base > 0 ? percent(simulated / base) : Number.isFinite(base) ? '0,00%' : '—'} de custo efetivo simulado, usando ${mode}. ${anyMissing ? 'Há indicadores sem histórico suficiente para alguma assessoria; confira as células exibidas como “—”.' : 'Os resultados representam o mês 1 da projeção.'}`;
-    return result;
+  function calculateScenarioFees(scenario, recoveryValue, profile) {
+    if (!profile || !profile.hasContractMix || !state.policy.length) return { amount: null, currentAmount: null, rows: [] };
+    const rates = scenario.rates || [];
+    const rows = state.policy.map(policyRow => {
+      const key = policyRow.key || mapPolicyAgingBucket(policyRow.range);
+      const agingAmount = profile.totals[key] || 0;
+      const share = profile.totalRecovered > 0 ? agingAmount / profile.totalRecovered : 0;
+      const allocated = Number.isFinite(recoveryValue) ? recoveryValue * share : null;
+      const currentB2C = Number(policyRow.b2c || 0) * 100;
+      const currentB2B = Number(policyRow.b2b || 0) * 100;
+      const override = rates.find(rate => rate.key === key);
+      const newB2C = override ? Number(override.newB2C) : currentB2C;
+      const newB2B = override ? Number(override.newB2B) : currentB2B;
+      const currentRate = currentB2C * profile.cpfShare + currentB2B * profile.cnpjShare;
+      const newRate = newB2C * profile.cpfShare + newB2B * profile.cnpjShare;
+      const currentFee = Number.isFinite(allocated) ? allocated * currentRate / 100 : null;
+      const newFee = Number.isFinite(allocated) ? allocated * newRate / 100 : null;
+      return { key, range: policyRow.range, share, allocated, currentB2C, currentB2B, newB2C, newB2B, currentRate, newRate, currentFee, newFee, delta: Number.isFinite(newFee) && Number.isFinite(currentFee) ? newFee - currentFee : null };
+    });
+    return { amount: sumOrNull(rows.map(row => row.newFee)), currentAmount: sumOrNull(rows.map(row => row.currentFee)), rows };
   }
 
-  function renderPolicy() {
-    $('#policyTableBody').innerHTML = state.policy.length ? state.policy.map(row => `
-      <tr><td>${esc(row.range)}</td><td class="numeric">${percentPoints(row.b2c * 100, 2)}</td><td class="numeric">${percentPoints(row.b2b * 100, 2)}</td></tr>`).join('') : '<tr><td colspan="3">Tabela de política não encontrada no arquivo.</td></tr>';
+  function buildCommissionScenarioResult(scenario) {
+    if (!scenario) return null;
+    const records = groupRows(getFilteredRows(true));
+    const group = records.find(row => row.agency === scenario.agency);
+    const baselineInfo = group ? getBaseline(group, scenario.basis, 'average') : { value: null, count: 0 };
+    const baseline = baselineInfo.value;
+    const target = scenario.targetMode === 'portfolio_percent'
+      ? (Number.isFinite(Number(scenario.portfolioValue)) && Number(scenario.portfolioValue) > 0 ? Number(scenario.portfolioValue) * Number(scenario.targetPercent || 0) / 100 : null)
+      : (Number.isFinite(Number(scenario.targetAmount)) && Number(scenario.targetAmount) > 0 ? Number(scenario.targetAmount) : null);
+    const alreadyAtGoal = Number.isFinite(baseline) && Number.isFinite(target) && baseline >= target;
+    const additionalRecovery = Number.isFinite(target) && Number.isFinite(baseline) ? Math.max(0, target - baseline) : null;
+    const evaluationValue = Number.isFinite(target) && Number.isFinite(baseline) ? Math.max(target, baseline) : target;
+    const profile = getAgingProfile(scenario.agency);
+    const evaluationFees = calculateScenarioFees(scenario, evaluationValue, profile);
+    const baselineFees = calculateScenarioFees(scenario, baseline, profile);
+    const additionalCommissionVsToday = Number.isFinite(evaluationFees.amount) && Number.isFinite(baselineFees.currentAmount)
+      ? evaluationFees.amount - baselineFees.currentAmount : null;
+    const extraCommissionForNewRates = Number.isFinite(evaluationFees.amount) && Number.isFinite(evaluationFees.currentAmount)
+      ? evaluationFees.amount - evaluationFees.currentAmount : null;
+    const netIncremental = Number.isFinite(additionalRecovery) && Number.isFinite(additionalCommissionVsToday)
+      ? additionalRecovery - additionalCommissionVsToday : null;
+    return {
+      scenario, baseline, baselineCount: baselineInfo.count, target, evaluationValue, additionalRecovery, profile,
+      currentFeeAtTarget: evaluationFees.currentAmount, newFeeAtTarget: evaluationFees.amount,
+      currentFeeAtBaseline: baselineFees.currentAmount, additionalCommissionVsToday,
+      extraCommissionForNewRates, netIncremental, agingRows: evaluationFees.rows,
+      alreadyAtGoal
+    };
   }
+
+  function renderCurrentPolicyTable() {
+    $('#currentPolicyTableBody').innerHTML = state.policy.length
+      ? state.policy.map(row => `<tr><td>${esc(row.range)}</td><td class="numeric">${percentPoints(row.b2c * 100)}</td><td class="numeric">${percentPoints(row.b2b * 100)}</td></tr>`).join('')
+      : '<tr><td colspan="3">Importe o Excel com a política vigente para exibir as taxas por aging.</td></tr>';
+    $('#currentPolicySource').textContent = state.policy.length ? 'Origem: Política de Comissionamento do Excel' : 'Sem política importada';
+  }
+
+  function renderCommissionScenarioSelect() {
+    const select = $('#commissionScenarioSelect');
+    const scenario = getActiveCommissionScenario();
+    select.innerHTML = state.commissionScenarios.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('');
+    select.disabled = !state.commissionScenarios.length;
+    if (scenario) select.value = scenario.id;
+    $('#deleteCommissionScenarioBtn').disabled = state.commissionScenarios.length <= 1;
+  }
+
+  function renderCommissionRatesTable(result) {
+    const scenario = result?.scenario || getActiveCommissionScenario();
+    const profile = result?.profile || (scenario ? getAgingProfile(scenario.agency) : null);
+    const rows = state.policy.map(policyRow => {
+      const key = policyRow.key || mapPolicyAgingBucket(policyRow.range);
+      const override = scenario?.rates?.find(rate => rate.key === key);
+      const newB2C = override ? Number(override.newB2C) : Number(policyRow.b2c || 0) * 100;
+      const newB2B = override ? Number(override.newB2B) : Number(policyRow.b2b || 0) * 100;
+      const share = profile && profile.totalRecovered > 0 ? (profile.totals[key] || 0) / profile.totalRecovered : null;
+      return { range: policyRow.range, newB2C, newB2B, currentB2C: Number(policyRow.b2c || 0) * 100, currentB2B: Number(policyRow.b2b || 0) * 100, share };
+    });
+    $('#commissionRatesTableBody').innerHTML = rows.length ? rows.map((row, index) => `
+      <tr><td><strong>${esc(row.range)}</strong></td><td class="numeric">${percent(row.share, 1)}</td><td class="numeric">${percentPoints(row.currentB2C)}</td><td class="numeric">${percentPoints(row.currentB2B)}</td>
+      <td class="numeric"><input class="commission-rate-input" type="number" min="0" max="100" step="0.01" value="${row.newB2C.toFixed(3)}" data-rate-index="${index}" data-rate-field="newB2C" aria-label="Nova taxa B2C para ${esc(row.range)}"></td>
+      <td class="numeric"><input class="commission-rate-input" type="number" min="0" max="100" step="0.01" value="${row.newB2B.toFixed(3)}" data-rate-index="${index}" data-rate-field="newB2B" aria-label="Nova taxa B2B para ${esc(row.range)}"></td></tr>`).join('')
+      : '<tr><td colspan="6">Não há política por aging carregada para editar.</td></tr>';
+  }
+
+  function renderCommissionScenarioMetrics(result) {
+    const metrics = $('#commissionScenarioMetrics');
+    if (!result) {
+      metrics.innerHTML = '<div class="scenario-empty">Crie um estudo para começar a simulação.</div>';
+      $('#commissionScenarioDisclaimer').textContent = '';
+      $('#commissionScenarioSentence').textContent = 'Selecione uma assessoria e informe a condição para desbloquear a nova tabela.';
+      $('#commissionFeeChart').innerHTML = '<p class="muted-empty">A comparação aparecerá após configurar a meta e importar a distribuição por aging.</p>';
+      $('#commissionAgingBreakdownBody').innerHTML = '<tr><td colspan="6">Nenhum cenário selecionado.</td></tr>';
+      renderCommissionRatesTable(null);
+      return;
+    }
+    const scenario = result.scenario;
+    const validTarget = Number.isFinite(result.target);
+    const targetLabel = scenario.targetMode === 'portfolio_percent'
+      ? `${number(scenario.targetPercent, 2)}% da carteira cancelada de ${money(scenario.portfolioValue)}`
+      : `meta de ${money(result.target)}`;
+    $('#commissionScenarioSentence').innerHTML = `<strong>${esc(scenario.agency || 'Assessoria')}</strong> deverá atingir <strong>${esc(targetLabel)}</strong> em ${esc(BASIS_LABELS[scenario.basis] || scenario.basis)} para liberar a nova tabela de comissão.`;
+
+    const values = [
+      ['Recuperação média atual', result.baseline, 'Patamar mensal do histórico'],
+      ['Meta para desbloqueio', result.target, scenario.targetMode === 'portfolio_percent' ? 'Percentual do saldo cancelado informado' : 'Valor bruto definido manualmente'],
+      ['Recuperação adicional estimada', result.additionalRecovery, result.alreadyAtGoal ? 'A média atual já alcança a meta' : 'Diferença entre meta e média atual'],
+      ['Comissão na tabela atual', result.currentFeeAtTarget, result.alreadyAtGoal ? 'Custo no patamar médio atual' : 'Custo estimado ao atingir a meta'],
+      ['Comissão na nova tabela', result.newFeeAtTarget, result.alreadyAtGoal ? 'Custo no patamar médio atual' : 'Custo estimado ao atingir a meta'],
+      ['Custo incremental vs. hoje', result.additionalCommissionVsToday, 'Nova comissão na meta menos comissão atual no patamar histórico'],
+      ['Saldo incremental após custo de comissão', result.netIncremental, 'Recuperação adicional menos o custo incremental de comissão']
+    ];
+    metrics.innerHTML = values.map((item, index) => `<div class="scenario-metric ${index === 2 || index === 6 ? 'highlight' : ''}"><span>${item[0]}</span><strong class="${index === 2 || index === 6 ? (Number.isFinite(item[1]) && item[1] >= 0 ? 'positive' : 'negative') : ''}">${money(item[1], true)}</strong><small>${item[2]}</small></div>`).join('');
+
+    const issues = [];
+    if (!validTarget) issues.push(scenario.targetMode === 'portfolio_percent' ? 'Informe o valor atualizado da carteira cancelada e um percentual válido.' : 'Informe o valor bruto que libera a nova tabela.');
+    if (!Number.isFinite(result.baseline)) issues.push('Não há média histórica disponível para este indicador e período.');
+    if (!result.profile) issues.push('Não foi encontrada distribuição por aging para esta assessoria no período selecionado.');
+    if (result.profile && !result.profile.hasContractMix) issues.push('A composição CPF/CNPJ não foi encontrada; por isso o custo de comissão não será estimado até que exista essa informação.');
+    if (!state.policy.length) issues.push('A tabela vigente por aging não foi encontrada no arquivo.');
+    if (result.alreadyAtGoal) issues.push('A média histórica já está no nível ou acima desta meta; a recuperação adicional necessária é zero e o custo é avaliado sobre a média atual.');
+    $('#commissionScenarioDisclaimer').textContent = issues.length ? issues.join(' ') : `Mix calculado com ${result.profile.includedMonths} mês(es) de distribuição detalhada. A comissão é estimada pela composição média CPF/CNPJ (CPF tratado como B2C e CNPJ como B2B, hipótese a validar internamente). A nova tabela incide sobre todo o valor recuperado no mês avaliado.`;
+
+    const chart = $('#commissionFeeChart');
+    const recoveryValues = [
+      { label: 'Média mensal atual', value: result.baseline, style: 'current' },
+      { label: 'Meta de desbloqueio', value: result.target, style: 'new' }
+    ];
+    const feeValues = [
+      { label: 'Comissão pela tabela atual', value: result.currentFeeAtTarget, style: 'current' },
+      { label: 'Comissão pela nova tabela', value: result.newFeeAtTarget, style: 'new' }
+    ];
+    const renderBarGroup = (heading, rows, footer) => {
+      const maxValue = Math.max(1, ...rows.map(row => Number.isFinite(row.value) ? row.value : 0));
+      if (!rows.every(row => Number.isFinite(row.value))) return `<div class="fee-chart-section"><h4>${heading}</h4><p class="muted-empty">Aguardando valores válidos.</p></div>`;
+      return `<div class="fee-chart-section"><h4>${heading}</h4>${rows.map(row => `<div class="fee-chart-row"><div class="fee-chart-label"><span>${row.label}</span><strong>${money(row.value)}</strong></div><div class="fee-chart-track"><div class="fee-chart-fill ${row.style}" style="width:${Math.max(0, row.value / maxValue * 100)}%"></div></div></div>`).join('')}<div class="fee-chart-delta">${footer}</div></div>`;
+    };
+    chart.innerHTML = renderBarGroup('Recuperação mensal', recoveryValues,
+      `Recuperação adicional necessária: <strong>${money(result.additionalRecovery)}</strong>${result.alreadyAtGoal ? ' · meta já alcançada pela média atual' : ''}`) +
+      renderBarGroup('Custo de comissão no patamar avaliado', feeValues,
+      `Diferença entre a nova e a atual tabela: <strong>${money(result.extraCommissionForNewRates)}</strong>`);
+
+    $('#commissionAgingBreakdownBody').innerHTML = result.agingRows.length ? result.agingRows.map(row => `<tr><td>${esc(row.range)}</td><td class="numeric">${percent(row.share, 1)}</td><td class="numeric">${money(row.allocated)}</td><td class="numeric">${money(row.currentFee)}</td><td class="numeric"><strong>${money(row.newFee)}</strong></td><td class="numeric ${row.delta > 0 ? 'negative' : 'positive'}">${row.delta > 0 ? '+' : ''}${money(row.delta)}</td></tr>`).join('') : '<tr><td colspan="6">Sem distribuição histórica por aging para a assessoria selecionada.</td></tr>';
+    renderCommissionRatesTable(result);
+  }
+
+  function renderCommissionModule() {
+    renderCurrentPolicyTable();
+    renderCommissionScenarioSelect();
+    const scenario = getActiveCommissionScenario();
+    if (!scenario) { renderCommissionScenarioMetrics(null); return; }
+    $('#commissionScenarioName').value = scenario.name;
+    $('#commissionAgency').value = scenario.agency;
+    $('#commissionTriggerBasis').value = scenario.basis;
+    $('#commissionTargetMode').value = scenario.targetMode;
+    $('#commissionPortfolioValue').value = scenario.portfolioValue ?? '';
+    $('#commissionTargetPercent').value = scenario.targetPercent ?? 10;
+    $('#commissionTargetAmount').value = scenario.targetAmount ?? '';
+    $('#commissionPortfolioField').classList.toggle('hidden', scenario.targetMode !== 'portfolio_percent');
+    $('#commissionPercentField').classList.toggle('hidden', scenario.targetMode !== 'portfolio_percent');
+    $('#commissionFixedField').classList.toggle('hidden', scenario.targetMode !== 'fixed_amount');
+    renderCommissionScenarioMetrics(buildCommissionScenarioResult(scenario));
+  }
+
+  // Alias used by the existing goal controls: every change refreshes the new commission lab.
+  function renderCommissionComparison() { renderCommissionModule(); }
+
+  function createCommissionScenario() {
+    if (!state.agencies.length) { toast('Adicione uma assessoria antes de criar uma tabela.', 'error'); return; }
+    const currentScenario = getActiveCommissionScenario();
+    const agency = state.agencyFilter !== 'ALL' ? state.agencyFilter : (currentScenario?.agency || state.agencies[0]);
+    const scenario = makeCommissionScenario(agency, `${agency} — novo incentivo ${state.commissionScenarioCounter}`);
+    state.commissionScenarios.push(scenario);
+    state.activeCommissionScenarioId = scenario.id;
+    renderCommissionModule();
+    toast('Novo estudo de comissão criado.');
+  }
+
+  function deleteCommissionScenario() {
+    if (state.commissionScenarios.length <= 1) return;
+    state.commissionScenarios = state.commissionScenarios.filter(item => item.id !== state.activeCommissionScenarioId);
+    state.activeCommissionScenarioId = state.commissionScenarios[0]?.id || null;
+    renderCommissionModule();
+    toast('Estudo de comissão excluído.');
+  }
+
+  function updateCommissionRate(event) {
+    const input = event.target.closest('[data-rate-index][data-rate-field]');
+    if (!input) return;
+    const scenario = getActiveCommissionScenario();
+    if (!scenario) return;
+    const index = Number(input.dataset.rateIndex);
+    const field = input.dataset.rateField;
+    if (!scenario.rates[index] || !['newB2C', 'newB2B'].includes(field)) return;
+    scenario.rates[index][field] = clamp(input.value, 0, 100);
+    renderCommissionScenarioMetrics(buildCommissionScenarioResult(scenario));
+  }
+
 
   function renderHistory() {
     const search = normalized($('#historySearch').value);
@@ -649,9 +804,7 @@
     updateMetrics(groups);
     renderOverview(groups);
     renderTargets();
-    renderRuleEditor();
-    renderCommissionComparison(getTargetRows());
-    renderPolicy();
+    renderCommissionModule();
     renderHistory();
     $('#studyScopeLabel').textContent = `${state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter} · ${state.hasHistory ? `${MONTHS[state.startMonth - 1].short} a ${MONTHS[state.endMonth - 1].short}` : 'cenário manual sem histórico'}`;
   }
@@ -668,23 +821,14 @@
 
   function getExportRows() {
     const targets = getTargetRows();
-    const commissions = buildCommissionResults(targets);
+    const commissionScenarios = state.commissionScenarios.map(scenario => buildCommissionScenarioResult(scenario)).filter(Boolean);
     const filteredHistory = getFilteredRows().sort((a, b) => a.month - b.month || a.agency.localeCompare(b.agency, 'pt-BR'));
-    const ruleRows = [];
-    const scopes = [{ name: 'Todas as assessorias', rules: state.globalRules }, ...Object.entries(state.rulesByAgency).map(([name, rules]) => ({ name, rules }))];
-    scopes.forEach(({ name, rules }) => {
-      if (rules.mode === 'threshold_bonus') {
-        ruleRows.push([name, rules.mode, rules.commissionBasis, 'Gatilho', rules.trigger.basis, rules.trigger.threshold, rules.trigger.baseRate, rules.trigger.bonusRate]);
-      } else {
-        rules.tiers.forEach(tier => ruleRows.push([name, rules.mode, rules.commissionBasis, tier.min, '', '', tier.rate, '']));
-      }
-    });
-    return { targets, commissions, filteredHistory, ruleRows };
+    return { targets, commissionScenarios, filteredHistory, performance: groupRows(filteredHistory) };
   }
 
   function buildWorkbook() {
     if (!window.XLSX) throw new Error('O leitor/exportador Excel não está disponível. Verifique a conexão com a biblioteca SheetJS.');
-    const { targets, commissions, filteredHistory, ruleRows } = getExportRows();
+    const { targets, commissionScenarios, filteredHistory, performance } = getExportRows();
     const wb = window.XLSX.utils.book_new();
     const period = `${MONTHS[state.startMonth - 1].name} a ${MONTHS[state.endMonth - 1].name}${state.year ? `/${state.year}` : ''}`;
     const summary = [
@@ -696,12 +840,22 @@
       ['Referência', state.baselineMode === 'average' ? 'Média mensal' : 'Último mês com dado'],
       ['Aumento inicial (%)', state.targetMode === 'monthly_growth' ? state.monthlyInitialGrowth : state.growth],
       ['Crescimento mensal composto (%)', state.targetMode === 'monthly_growth' ? state.monthlyGrowthRate : 'Não aplicável'],
-      ['Meses projetados', state.projectionMonths], ['Gerado em', new Date().toLocaleString('pt-BR')],
-      [], ['Indicadores consolidados'], ['Meta total mês 1', sumOrNull(targets.map(row => row.targetStart))],
-      ['Meta total mês final', sumOrNull(targets.map(row => row.targetFinal))], ['Total projetado', sumOrNull(targets.map(row => row.totalProjection))],
-      ['Comissão simulada mês 1', sumOrNull(commissions.map(row => row.simulated))]
+      ['Meses projetados', state.projectionMonths], ['Cenários de comissão salvos', commissionScenarios.length],
+      ['Gerado em', new Date().toLocaleString('pt-BR')], [], ['Indicadores consolidados'],
+      ['Meta total mês 1', sumOrNull(targets.map(row => row.targetStart))],
+      ['Meta total mês final', sumOrNull(targets.map(row => row.targetFinal))],
+      ['Total projetado', sumOrNull(targets.map(row => row.totalProjection))]
     ];
     appendSheet(wb, 'Resumo', summary);
+
+    const performanceData = [['Assessoria', 'Meses com dados', 'Cobrança total (R$)', 'Recuperado bruto (R$)', 'Média mensal bruto (R$)', 'Recuperado ativo (R$)', 'Média mensal ativo (R$)', 'Recuperado cancelado (R$)', 'Média mensal cancelado (R$)', 'Comissão total (R$)', 'Comissão média (R$)', 'Custo efetivo (%)']];
+    performance.forEach(group => performanceData.push([
+      group.agency, group.monthCount, group.totalCollection, group.totalRecovered, group.avgRecovered,
+      group.activeCount ? group.totalActive : null, group.activeCount ? group.avgActive : null,
+      group.canceledCount ? group.totalCanceled : null, group.canceledCount ? group.avgCanceled : null, group.totalCommission,
+      group.commissionCount ? group.avgCommission : null, Number.isFinite(group.effectiveRate) ? group.effectiveRate * 100 : null
+    ]));
+    appendSheet(wb, 'Desempenho por assessoria', performanceData);
 
     const targetData = [['Assessoria', 'Indicador', 'Referência mensal', 'Meses com dado', 'Meta mês 1', 'Meta mês final', 'Total projetado', 'Aumento inicial']];
     targets.forEach(row => targetData.push([row.agency, BASIS_LABELS[state.targetBasis], row.baseline, row.baselineCount, row.targetStart, row.targetFinal, row.totalProjection, row.increase]));
@@ -709,14 +863,54 @@
 
     const evolutionData = [['Mês', ...targets.map(row => row.agency), 'Total consolidado']];
     for (let index = 0; index < state.projectionMonths; index += 1) {
-      evolutionData.push([`Mês ${index + 1}`, ...targets.map(row => row.schedule[index]), sum(targets.map(row => row.schedule[index]))]);
+      evolutionData.push([`Mês ${index + 1}`, ...targets.map(row => row.schedule[index]), sumOrNull(targets.map(row => row.schedule[index]))]);
     }
     appendSheet(wb, 'Evolução mensal', evolutionData);
 
-    const commissionData = [['Assessoria', 'Base de comissão', 'Indicador do gatilho', 'Gatilho atingido', 'Taxa efetiva (%)', 'Comissão simulada', 'Comissão histórica média', 'Variação de custo', 'Líquido após comissão']];
-    commissions.forEach(row => commissionData.push([row.agency, row.commissionBasisValue, row.triggerBasisValue, row.rules.mode === 'threshold_bonus' ? (row.triggerReached ? 'Sim' : 'Não') : 'N/A', row.effectiveRate, row.simulated, row.historical, row.delta, row.net]));
-    appendSheet(wb, 'Comissões', commissionData);
-    appendSheet(wb, 'Regras de comissão', [['Escopo', 'Modo', 'Base de cálculo', 'Faixa mínima (R$)', 'Indicador do gatilho', 'Gatilho (R$)', 'Taxa-base (%)', 'Bônus (%)'], ...ruleRows]);
+    const commissionData = [[
+      'Estudo', 'Assessoria', 'Indicador do gatilho', 'Condição', 'Carteira cancelada informada',
+      'Percentual da carteira (%)', 'Meta fixa (R$)', 'Média histórica mensal', 'Meta de desbloqueio (R$)',
+      'Patamar avaliado para comissão (R$)', 'Recuperação adicional (R$)', 'Comissão atual no patamar avaliado (R$)', 'Nova comissão no patamar avaliado (R$)',
+      'Aumento da comissão pela nova tabela (R$)', 'Custo incremental vs. hoje (R$)', 'Saldo incremental após custo de comissão (R$)',
+      'Meses de aging considerados', 'Composição CPF (%)', 'Composição CNPJ (%)'
+    ]];
+    const agingRows = [['Estudo', 'Assessoria', 'Faixa de aging', 'Participação histórica (%)', 'Recuperação estimada (R$)', 'Taxa atual B2C (%)', 'Taxa atual B2B (%)', 'Nova taxa B2C (%)', 'Nova taxa B2B (%)', 'Comissão atual estimada (R$)', 'Nova comissão estimada (R$)', 'Diferença (R$)']];
+    commissionScenarios.forEach(result => {
+      const scenario = result.scenario;
+      const condition = scenario.targetMode === 'portfolio_percent' ? 'Percentual da carteira cancelada' : 'Valor fixo';
+      commissionData.push([
+        scenario.name, scenario.agency, BASIS_LABELS[scenario.basis], condition, scenario.portfolioValue,
+        scenario.targetMode === 'portfolio_percent' ? scenario.targetPercent : null,
+        scenario.targetMode === 'fixed_amount' ? scenario.targetAmount : null,
+        result.baseline, result.target, result.evaluationValue, result.additionalRecovery,
+        result.currentFeeAtTarget, result.newFeeAtTarget, result.extraCommissionForNewRates,
+        result.additionalCommissionVsToday, result.netIncremental, result.profile?.includedMonths,
+        result.profile ? result.profile.cpfShare * 100 : null, result.profile ? result.profile.cnpjShare * 100 : null
+      ]);
+      (result.agingRows || []).forEach(row => agingRows.push([
+        scenario.name, scenario.agency, row.range, row.share * 100, row.allocated,
+        row.currentB2C, row.currentB2B, row.newB2C, row.newB2B,
+        row.currentFee, row.newFee, row.delta
+      ]));
+    });
+    appendSheet(wb, 'Cenários de comissão', commissionData);
+    const simulatedRates = [['Estudo', 'Assessoria', 'Faixa de aging', 'Mix histórico (%)', 'Taxa atual B2C (%)', 'Taxa atual B2B (%)', 'Nova taxa B2C (%)', 'Nova taxa B2B (%)']];
+    commissionScenarios.forEach(result => {
+      const scenario = result.scenario;
+      state.policy.forEach(policyRow => {
+        const key = policyRow.key || mapPolicyAgingBucket(policyRow.range);
+        const rate = scenario.rates?.find(item => item.key === key);
+        const share = result.profile?.totalRecovered > 0 ? (result.profile.totals[key] || 0) / result.profile.totalRecovered * 100 : null;
+        simulatedRates.push([
+          scenario.name, scenario.agency, policyRow.range, share,
+          Number(policyRow.b2c || 0) * 100, Number(policyRow.b2b || 0) * 100,
+          rate ? Number(rate.newB2C) : Number(policyRow.b2c || 0) * 100,
+          rate ? Number(rate.newB2B) : Number(policyRow.b2b || 0) * 100
+        ]);
+      });
+    });
+    appendSheet(wb, 'Tabelas simuladas', simulatedRates);
+    appendSheet(wb, 'Custo por aging', agingRows);
 
     const historyData = [['Assessoria', 'Mês', 'Parcial', 'Cobrança', 'Recuperado bruto', 'Recuperado ativo', 'Recuperado cancelado', 'Comissão', 'Conversão', 'Custo / recuperação']];
     filteredHistory.forEach(row => historyData.push([row.agency, row.monthName, row.partial ? 'Sim' : 'Não', row.collection, row.recovered, row.active, row.canceled, row.commission, Number.isFinite(row.conversion) ? row.conversion * 100 : null, Number.isFinite(row.costRatio) ? row.costRatio * 100 : null]));
@@ -728,7 +922,7 @@
 
   function appendSheet(workbook, name, rows) {
     const sheet = window.XLSX.utils.aoa_to_sheet(rows);
-    sheet['!cols'] = (rows[0] || []).map((_, index) => ({ wch: Math.min(34, Math.max(14, ...rows.slice(0, 30).map(row => String(row[index] ?? '').length + 2))) }));
+    sheet['!cols'] = (rows[0] || []).map((_, index) => ({ wch: Math.min(38, Math.max(14, ...rows.slice(0, 35).map(row => String(row[index] ?? '').length + 2))) }));
     window.XLSX.utils.book_append_sheet(workbook, sheet, name);
   }
 
@@ -737,36 +931,72 @@
       const workbook = buildWorkbook();
       const dateTag = new Date().toISOString().slice(0, 10);
       window.XLSX.writeFile(workbook, `estudo-assessorias-${dateTag}.xlsx`);
-      toast('Estudo Excel gerado com abas de resumo, metas, evolução, comissões e histórico.');
+      closeExportMenu();
+      toast('Excel gerado com resumo, metas, cenários de comissão, custos por aging, política e histórico.');
     } catch (error) { toast(error.message || 'Não foi possível gerar o Excel.', 'error'); }
   }
 
   function buildPrintReport() {
-    const { targets, commissions } = getExportRows();
+    const { targets, commissionScenarios, filteredHistory, performance } = getExportRows();
     const totals = {
       start: sumOrNull(targets.map(row => row.targetStart)), final: sumOrNull(targets.map(row => row.targetFinal)),
-      projection: sumOrNull(targets.map(row => row.totalProjection)), commission: sumOrNull(commissions.map(row => row.simulated))
+      projection: sumOrNull(targets.map(row => row.totalProjection))
     };
     const period = `${MONTHS[state.startMonth - 1].name} a ${MONTHS[state.endMonth - 1].name}${state.year ? `/${state.year}` : ''}`;
-    const monthHeaders = Array.from({ length: state.projectionMonths }, (_, index) => `<th>M${index + 1}</th>`).join('');
     const evolutionRows = Array.from({ length: state.projectionMonths }, (_, monthIndex) => {
-      const monthly = sum(targets.map(row => row.schedule[monthIndex]));
+      const monthly = sumOrNull(targets.map(row => row.schedule[monthIndex]));
       return `<tr><td>Mês ${monthIndex + 1}</td><td>${money(monthly)}</td></tr>`;
     }).join('');
+    const performanceRows = performance.map(group => `<tr>
+      <td>${esc(group.agency)}</td><td>${group.monthCount}</td><td>${money(group.totalRecovered)}</td><td>${money(group.avgRecovered)}</td>
+      <td>${money(group.activeCount ? group.totalActive : null)}</td><td>${money(group.avgActive)}</td><td>${money(group.canceledCount ? group.totalCanceled : null)}</td><td>${money(group.avgCanceled)}</td>
+      <td>${money(group.totalCommission)}</td><td>${percent(group.effectiveRate)}</td>
+    </tr>`).join('');
+    const scenarioSummary = commissionScenarios.map(result => `<tr>
+      <td>${esc(result.scenario.name)}</td><td>${esc(result.scenario.agency)}</td><td>${esc(BASIS_LABELS[result.scenario.basis])}</td>
+      <td>${money(result.target)}</td><td>${money(result.evaluationValue)}</td><td>${money(result.additionalRecovery)}</td><td>${money(result.currentFeeAtTarget)}</td>
+      <td>${money(result.newFeeAtTarget)}</td><td>${money(result.additionalCommissionVsToday)}</td><td>${money(result.netIncremental)}</td>
+    </tr>`).join('');
+    const scenarioDetails = commissionScenarios.map(result => {
+      const scenario = result.scenario;
+      const rateRows = state.policy.map(policyRow => {
+        const key = policyRow.key || mapPolicyAgingBucket(policyRow.range);
+        const rate = scenario.rates?.find(item => item.key === key);
+        const share = result.profile?.totalRecovered > 0 ? (result.profile.totals[key] || 0) / result.profile.totalRecovered : null;
+        return `<tr><td>${esc(policyRow.range)}</td><td>${percent(share, 1)}</td><td>${percentPoints(Number(policyRow.b2c || 0) * 100)}</td><td>${percentPoints(Number(policyRow.b2b || 0) * 100)}</td><td>${percentPoints(rate ? Number(rate.newB2C) : Number(policyRow.b2c || 0) * 100)}</td><td>${percentPoints(rate ? Number(rate.newB2B) : Number(policyRow.b2b || 0) * 100)}</td></tr>`;
+      }).join('');
+      const agingDetail = result.agingRows?.map(row => `<tr><td>${esc(row.range)}</td><td>${percent(row.share, 1)}</td><td>${money(row.allocated)}</td><td>${money(row.currentFee)}</td><td>${money(row.newFee)}</td><td>${money(row.delta)}</td></tr>`).join('') || '<tr><td colspan="6">Sem custo calculável por aging: confira a disponibilidade do histórico e da composição CPF/CNPJ.</td></tr>';
+      return `<section class="print-subsection"><h3>${esc(scenario.name)} — ${esc(scenario.agency)}</h3>
+        <p class="print-scenario-meta">Indicador: ${esc(BASIS_LABELS[scenario.basis])} · Meta: ${money(result.target)} · Patamar avaliado: ${money(result.evaluationValue)} · Recuperação adicional: ${money(result.additionalRecovery)} · Comissão atual: ${money(result.currentFeeAtTarget)} · Nova comissão: ${money(result.newFeeAtTarget)} · Custo incremental vs. hoje: ${money(result.additionalCommissionVsToday)} · Saldo incremental após custo de comissão: ${money(result.netIncremental)}</p>
+        <h4>Tabela nova por aging</h4><table class="print-table"><thead><tr><th>Faixa</th><th>Mix histórico</th><th>Atual B2C</th><th>Atual B2B</th><th>Nova B2C</th><th>Nova B2B</th></tr></thead><tbody>${rateRows || '<tr><td colspan="6">Política por aging não importada.</td></tr>'}</tbody></table>
+        <h4>Custo projetado por aging</h4><table class="print-table"><thead><tr><th>Faixa</th><th>Mix</th><th>Recuperação estimada</th><th>Comissão atual</th><th>Nova comissão</th><th>Diferença</th></tr></thead><tbody>${agingDetail}</tbody></table></section>`;
+    }).join('');
+    const policyRows = state.policy.map(row => `<tr><td>${esc(row.range)}</td><td>${percentPoints(row.b2c * 100)}</td><td>${percentPoints(row.b2b * 100)}</td></tr>`).join('');
+    const historyRows = filteredHistory.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(row.monthName)}${row.partial ? ' · parcial' : ''}</td><td>${money(row.collection)}</td><td>${money(row.recovered)}</td><td>${money(row.active)}</td><td>${money(row.canceled)}</td><td>${money(row.commission)}</td><td>${percent(row.conversion)}</td><td>${percent(row.costRatio)}</td></tr>`).join('');
     $('#printReport').innerHTML = `
-      <header class="print-header"><div><div class="print-kicker">CENTRAL DE RECUPERAÇÃO · MÓDULO ASSESSORIAS</div><h1>Estudo de metas e comissões</h1><p>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p></div><div class="print-period">${esc(period)}</div></header>
-      <section class="print-meta"><div><span>Arquivo de origem</span><strong>${esc(state.fileName)}</strong></div><div><span>Indicador da meta</span><strong>${esc(BASIS_LABELS[state.targetBasis])}</strong></div><div><span>Método</span><strong>${esc(MODE_LABELS[state.targetMode])}</strong></div><div><span>Filtro</span><strong>${esc(state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter)}</strong></div></section>
-      <section class="print-kpis"><div><span>Meta no mês 1</span><strong>${money(totals.start)}</strong></div><div><span>Meta no mês final</span><strong>${money(totals.final)}</strong></div><div><span>Total projetado</span><strong>${money(totals.projection)}</strong></div><div><span>Comissão simulada · mês 1</span><strong>${money(totals.commission)}</strong></div></section>
-      <h2>Metas por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Referência</th><th>Meta mês 1</th><th>Meta mês final</th><th>Total projetado</th></tr></thead><tbody>${targets.map(row => `<tr><td>${esc(row.agency)}</td><td>${money(row.baseline)}</td><td>${money(row.targetStart)}</td><td>${money(row.targetFinal)}</td><td>${money(row.totalProjection)}</td></tr>`).join('')}</tbody></table>
-      <h2>Evolução mensal consolidada</h2><table class="print-table"><thead><tr><th>Período</th><th>Meta total</th></tr></thead><tbody>${evolutionRows}</tbody></table>
-      <h2>Comissões por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Base comissão</th><th>Gatilho</th><th>Taxa efetiva</th><th>Comissão simulada</th><th>Líquido</th></tr></thead><tbody>${commissions.map(row => `<tr><td>${esc(row.agency)}</td><td>${money(row.commissionBasisValue)}</td><td>${row.rules.mode === 'threshold_bonus' ? (row.triggerReached ? 'Atingido' : 'Não atingido') : 'N/A'}</td><td>${percentPoints(row.effectiveRate)}</td><td>${money(row.simulated)}</td><td>${money(row.net)}</td></tr>`).join('')}</tbody></table>
-      <footer class="print-footer"><strong>Premissas:</strong> resultados são simulações agregadas com base nos campos disponíveis no histórico. Não representam apuração definitiva de comissão por título. Meses parciais ${state.includePartial ? 'foram incluídos' : 'foram excluídos'}.</footer>`;
+      <header class="print-header"><div><div class="print-kicker">CENTRAL DE RECUPERAÇÃO · MÓDULO ASSESSORIAS</div><h1>Estudo de metas e remuneração</h1><p>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p></div><div class="print-period">${esc(period)}</div></header>
+      <section class="print-meta"><div><span>Arquivo de origem</span><strong>${esc(state.fileName || 'Cenário manual')}</strong></div><div><span>Indicador da meta</span><strong>${esc(BASIS_LABELS[state.targetBasis])}</strong></div><div><span>Método</span><strong>${esc(MODE_LABELS[state.targetMode])}</strong></div><div><span>Filtro</span><strong>${esc(state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter)}</strong></div></section>
+      <section class="print-kpis"><div><span>Meta total mês 1</span><strong>${money(totals.start)}</strong></div><div><span>Meta mês final</span><strong>${money(totals.final)}</strong></div><div><span>Total projetado</span><strong>${money(totals.projection)}</strong></div><div><span>Cenários de comissão</span><strong>${commissionScenarios.length}</strong></div></section>
+      <h2>1. Visão geral por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Meses</th><th>Bruto total</th><th>Média bruto</th><th>Ativo total</th><th>Média ativo</th><th>Cancelado total</th><th>Média cancelado</th><th>Comissão</th><th>Custo efetivo</th></tr></thead><tbody>${performanceRows || '<tr><td colspan="10">Sem histórico disponível.</td></tr>'}</tbody></table>
+      <h2>2. Metas por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Indicador</th><th>Referência</th><th>Meta mês 1</th><th>Meta mês final</th><th>Total projetado</th></tr></thead><tbody>${targets.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(BASIS_LABELS[state.targetBasis])}</td><td>${money(row.baseline)}</td><td>${money(row.targetStart)}</td><td>${money(row.targetFinal)}</td><td>${money(row.totalProjection)}</td></tr>`).join('') || '<tr><td colspan="6">Nenhuma meta configurada.</td></tr>'}</tbody></table>
+      <h2>3. Evolução mensal consolidada</h2><table class="print-table"><thead><tr><th>Período</th><th>Meta total</th></tr></thead><tbody>${evolutionRows}</tbody></table>
+      <h2>4. Comparação dos cenários de comissão</h2><table class="print-table"><thead><tr><th>Estudo</th><th>Assessoria</th><th>Indicador</th><th>Meta</th><th>Patamar avaliado</th><th>Recuperação adicional</th><th>Comissão atual</th><th>Nova comissão</th><th>Custo incremental</th><th>Saldo após comissão</th></tr></thead><tbody>${scenarioSummary || '<tr><td colspan="10">Nenhum cenário criado.</td></tr>'}</tbody></table>
+      <h2>5. Memória de cálculo por aging de todos os cenários</h2>${scenarioDetails || '<p>Nenhum estudo de comissão salvo nesta sessão.</p>'}
+      <h2>6. Política atual por aging</h2><table class="print-table"><thead><tr><th>Faixa de atraso</th><th>Comissão B2C</th><th>Comissão B2B</th></tr></thead><tbody>${policyRows || '<tr><td colspan="3">Política atual não importada.</td></tr>'}</tbody></table>
+      <h2>7. Histórico filtrado utilizado</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Mês</th><th>Cobrança</th><th>Bruto</th><th>Ativo</th><th>Cancelado</th><th>Comissão</th><th>Conversão</th><th>Custo / recuperação</th></tr></thead><tbody>${historyRows || '<tr><td colspan="9">Sem histórico importado ou registros no recorte.</td></tr>'}</tbody></table>
+      <footer class="print-footer"><strong>Premissas e limitações:</strong> os custos são estimados com base na distribuição histórica por aging e na composição geral CPF/CNPJ da assessoria. A simulação associa CPF a B2C e CNPJ a B2B como hipótese operacional, a validar com a regra interna. A planilha não cruza aging, CPF/CNPJ e situação ativa/cancelada por título e não informa o saldo da carteira cancelada por assessoria; para gatilhos percentuais, esse saldo é informado manualmente. O resultado é estimativa gerencial, não apuração individual por título. Meses parciais ${state.includePartial ? 'foram incluídos' : 'foram excluídos'}.</footer>`;
   }
 
   function exportStudyPdf() {
     buildPrintReport();
+    closeExportMenu();
     toast('Na janela de impressão, selecione “Salvar como PDF”.');
     window.print();
+  }
+
+  function closeExportMenu() {
+    $('#exportMenu').classList.add('hidden');
+    $('#exportMenuToggle').setAttribute('aria-expanded', 'false');
   }
 
   function syncGrowth(value, source) {
@@ -785,49 +1015,6 @@
     renderCommissionComparison(getTargetRows());
   }
 
-  function handleRuleInput(event) {
-    const target = event.target;
-    const field = target.dataset.tierField;
-    if (!field) return;
-    const index = Number(target.dataset.tierIndex);
-    const rules = ensureEditableRules();
-    const tier = rules.tiers[index];
-    if (!tier) return;
-    const raw = Math.max(0, Number(target.value) || 0);
-    tier[field] = field === 'rate' ? Math.min(100, raw) : raw;
-    rules.tiers.sort((a, b) => a.min - b.min);
-    renderRuleEditor();
-    renderCommissionComparison(getTargetRows());
-  }
-
-  function handleTriggerInput() {
-    const rules = ensureEditableRules();
-    rules.trigger.basis = $('#triggerBasis').value;
-    rules.trigger.threshold = clamp($('#triggerThreshold').value, 0, 1e12);
-    rules.trigger.baseRate = clamp($('#triggerBaseRate').value, 0, 100);
-    rules.trigger.bonusRate = clamp($('#triggerBonusRate').value, 0, 100);
-    renderCommissionComparison(getTargetRows());
-  }
-
-  function resetActiveRules() {
-    const rate = state.ruleScope === 'ALL' ? getGlobalBaselineRate() : getBaselineRate(state.ruleScope);
-    const initial = makeDefaultRules(rate, getGlobalMonthlyRecovered());
-    if (state.ruleScope === 'ALL') state.globalRules = initial;
-    else state.rulesByAgency[state.ruleScope] = initial;
-    renderRuleEditor();
-    renderCommissionComparison(getTargetRows());
-    toast('Regra restaurada à referência histórica.');
-  }
-
-  function addTier() {
-    const rules = ensureEditableRules();
-    const sorted = [...rules.tiers].sort((a, b) => a.min - b.min);
-    const last = sorted[sorted.length - 1] || { min: 0, rate: 0 };
-    rules.tiers.push({ min: Math.max(100000, last.min + 100000), rate: Math.min(100, last.rate + 0.5) });
-    renderRuleEditor();
-    renderCommissionComparison(getTargetRows());
-  }
-
   function startManualScenario() {
     const names = $('#manualAgencyNames').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
     const unique = [...new Map(names.map(name => [normalized(name), name])).values()];
@@ -838,6 +1025,7 @@
     }
     state.rows = [];
     state.policy = [];
+    state.agingByAgency = {};
     state.fileName = 'Cenário manual (sem histórico)';
     state.year = null;
     state.hasHistory = false;
@@ -852,7 +1040,7 @@
     state.targetBasis = 'recovered';
     state.projectionMonths = 12;
     populateFilters();
-    initializeRules();
+    initializeCommissionScenarios();
     $('#historyFilters').classList.add('hidden');
     $('#manualScenarioSetup').classList.add('hidden');
     $('#emptyState').classList.add('hidden');
@@ -898,7 +1086,7 @@
     $('#newAgencyName').addEventListener('keydown', event => { if (event.key === 'Enter') addScenarioAgency(); });
 
     $('#clearDataBtn').addEventListener('click', () => {
-      state.rows = []; state.policy = []; state.fileName = ''; state.agencies = []; state.rulesByAgency = {}; state.manualTargets = {}; state.hasHistory = false;
+      state.rows = []; state.policy = []; state.agingByAgency = {}; state.commissionScenarios = []; state.activeCommissionScenarioId = null; state.fileName = ''; state.agencies = []; state.manualTargets = {}; state.hasHistory = false;
       $('#workspace').classList.add('hidden'); $('#emptyState').classList.remove('hidden'); $('#clearDataBtn').classList.add('hidden');
       $('#statusFile').textContent = '';
       setStatus('Dados removidos da memória desta sessão. Importe um histórico para continuar.');
@@ -944,25 +1132,35 @@
       if (input) updateManualTarget(input.dataset.manualAgency, input.value);
     });
 
-    $('#ruleScope').addEventListener('change', event => { state.ruleScope = event.target.value; renderRuleEditor(); renderCommissionComparison(getTargetRows()); });
-    $('#commissionMode').addEventListener('change', event => { ensureEditableRules().mode = event.target.value; renderRuleEditor(); renderCommissionComparison(getTargetRows()); });
-    $('#commissionBasis').addEventListener('change', event => { ensureEditableRules().commissionBasis = event.target.value; renderCommissionComparison(getTargetRows()); });
-    $('#tiersTableBody').addEventListener('change', handleRuleInput);
-    $('#tiersTableBody').addEventListener('click', event => {
-      const button = event.target.closest('[data-delete-tier]');
-      if (!button) return;
-      const rules = ensureEditableRules();
-      if (rules.tiers.length <= 1) return;
-      rules.tiers.splice(Number(button.dataset.deleteTier), 1);
-      renderRuleEditor(); renderCommissionComparison(getTargetRows());
+    $('#commissionScenarioSelect').addEventListener('change', event => { state.activeCommissionScenarioId = event.target.value; renderCommissionModule(); });
+    $('#newCommissionScenarioBtn').addEventListener('click', createCommissionScenario);
+    $('#deleteCommissionScenarioBtn').addEventListener('click', deleteCommissionScenario);
+    $('#commissionScenarioName').addEventListener('change', event => {
+      const scenario = getActiveCommissionScenario();
+      if (!scenario) return;
+      scenario.name = event.target.value.trim() || 'Estudo de comissão sem nome';
+      renderCommissionScenarioSelect();
     });
-    $('#addTierBtn').addEventListener('click', addTier);
-    $('#resetRulesBtn').addEventListener('click', resetActiveRules);
-    ['triggerBasis', 'triggerThreshold', 'triggerBaseRate', 'triggerBonusRate'].forEach(id => $(`#${id}`).addEventListener('change', handleTriggerInput));
+    $('#commissionAgency').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.agency = event.target.value; renderCommissionModule(); } });
+    $('#commissionTriggerBasis').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.basis = event.target.value; renderCommissionModule(); } });
+    $('#commissionTargetMode').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.targetMode = event.target.value; renderCommissionModule(); } });
+    $('#commissionPortfolioValue').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.portfolioValue = parseOptionalNumeric(event.target.value); renderCommissionScenarioMetrics(buildCommissionScenarioResult(scenario)); } });
+    $('#commissionTargetPercent').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.targetPercent = clamp(event.target.value, 0, 100); renderCommissionScenarioMetrics(buildCommissionScenarioResult(scenario)); } });
+    $('#commissionTargetAmount').addEventListener('change', event => { const scenario = getActiveCommissionScenario(); if (scenario) { scenario.targetAmount = parseOptionalNumeric(event.target.value); renderCommissionScenarioMetrics(buildCommissionScenarioResult(scenario)); } });
+    $('#commissionRatesTableBody').addEventListener('change', updateCommissionRate);
 
     $('#historySearch').addEventListener('input', renderHistory);
-    ['exportStudyExcelBtn', 'exportTargetsBtn', 'exportCommissionBtn', 'exportHistoryBtn'].forEach(id => $(`#${id}`).addEventListener('click', exportStudyExcel));
-    $('#exportStudyPdfBtn').addEventListener('click', exportStudyPdf);
+    $('#exportMenuToggle').addEventListener('click', () => {
+      const menu = $('#exportMenu');
+      const open = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden', !open);
+      $('#exportMenuToggle').setAttribute('aria-expanded', String(open));
+    });
+    $('#exportExcelOption').addEventListener('click', exportStudyExcel);
+    $('#exportPdfOption').addEventListener('click', exportStudyPdf);
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.export-menu-wrap')) closeExportMenu();
+    });
 
     const dropTargets = [$('#emptyState'), $('.page-heading')];
     dropTargets.forEach(target => {

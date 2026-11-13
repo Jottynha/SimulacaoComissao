@@ -454,3 +454,88 @@ input[type=range] { width: 100%; accent-color: var(--teal); cursor: pointer; }
   .agency-add-controls { width: 100%; }
   .agency-add-controls input { flex: 1; min-width: 0; }
 }
+
+/* Exportação única e centralizada */
+.study-toolbar { flex-direction: column; align-items: center; justify-content: center; gap: 9px; text-align: center; }
+.study-toolbar > div:first-child { align-items: center; }
+.study-actions { position: relative; justify-content: center; width: 100%; }
+.export-menu-wrap { width: auto; }
+.export-menu { position: absolute; z-index: 20; top: calc(100% + 8px); left: 50%; width: 245px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 14px 34px rgba(16,43,53,.16); transform: translateX(-50%); text-align: left; }
+.export-menu button { width: 100%; padding: 10px 11px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; border: 0; border-radius: 8px; color: var(--ink); background: #fff; text-align: left; }
+.export-menu button:hover { background: var(--teal-soft); }
+.export-menu button strong { font-size: 11px; }
+.export-menu button small { color: var(--muted); font-size: 9px; }
+
+/* Laboratório de incentivos por aging */
+.current-policy-card { margin-bottom: 15px; }
+.commission-scenario-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(310px, .9fr); gap: 15px; align-items: stretch; margin-bottom: 15px; }
+.scenario-editor, .commission-scenario-preview { min-width: 0; padding: 20px 22px; }
+.scenario-management { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 10px; align-items: end; margin-bottom: 15px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.scenario-management .control-block, .scenario-form-grid .control-block { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.scenario-management-actions { display: flex; gap: 6px; }
+.scenario-management-actions .button { white-space: nowrap; }
+.scenario-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.scenario-name-block { grid-column: 1/-1; }
+.scenario-form-grid input, .scenario-form-grid select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); background: #fff; font-size: 11px; font-weight: 600; }
+.scenario-form-grid small { color: var(--muted-2); font-size: 9px; line-height: 1.4; }
+.scenario-form-grid .inline-suffix { display: flex; align-items: center; gap: 8px; }
+.scenario-form-grid .inline-suffix input { flex: 1; min-width: 0; }
+.scenario-form-grid .inline-suffix span { color: var(--muted); font-size: 10px; }
+.scenario-sentence { margin-top: 16px; padding: 13px 14px; border-left: 3px solid var(--teal); border-radius: 8px; color: #52666c; background: #f1f7f5; font-size: 11px; line-height: 1.55; }
+.scenario-sentence strong { color: var(--navy); }
+.scenario-method-note { margin: 12px 0 0; }
+.scenario-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.scenario-metric { min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfc; }
+.scenario-metric.highlight { border-color: #c7e0d8; background: #f0f7f4; }
+.scenario-metric span { display: block; min-height: 25px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.scenario-metric strong { display: block; margin: 4px 0; color: var(--navy); font-size: clamp(13px, 1.5vw, 19px); letter-spacing: -.03em; overflow-wrap: anywhere; }
+.scenario-metric small { display: block; color: var(--muted-2); font-size: 8px; line-height: 1.35; }
+.scenario-metric .positive { color: var(--green); }
+.scenario-metric .negative { color: var(--red); }
+.scenario-empty { grid-column: 1/-1; padding: 24px 10px; color: var(--muted); text-align: center; font-size: 11px; }
+.commission-rates-card, .commission-chart-card, .comparison-card { margin-bottom: 15px; }
+.commission-rates-table { min-width: 760px; }
+.commission-rate-input { width: 95px; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--teal-dark); background: #fff; font-size: 10px; font-weight: 800; text-align: right; }
+.commission-rate-input:focus { outline: 3px solid rgba(22,125,117,.18); border-color: var(--teal); }
+.fee-chart { max-width: 760px; padding: 5px 0; }
+.fee-chart-row { margin-bottom: 17px; }
+.fee-chart-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--ink-soft); font-size: 10px; }
+.fee-chart-label strong { color: var(--navy); font-size: 11px; }
+.fee-chart-track { height: 13px; overflow: hidden; border-radius: 20px; background: #edf1f0; }
+.fee-chart-fill { height: 100%; border-radius: inherit; min-width: 2px; }
+.fee-chart-fill.current { background: #90a8a7; }
+.fee-chart-fill.new { background: var(--teal); }
+.fee-chart-delta { margin-top: 4px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
+.fee-chart-delta strong { color: var(--navy); }
+.commission-assumption { margin-top: 2px; }
+.commission-assumption p { line-height: 1.65; }
+.commission-assumption strong { color: var(--navy); }
+
+@media (max-width: 950px) {
+  .commission-scenario-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .study-toolbar { align-items: center; }
+  .study-actions { width: auto; }
+  .study-actions .button { flex: none; padding: 9px 13px; font-size: 10px; }
+  .scenario-management { grid-template-columns: 1fr; }
+  .scenario-management-actions { justify-content: flex-start; }
+  .scenario-form-grid { grid-template-columns: 1fr; }
+  .scenario-name-block { grid-column: auto; }
+  .scenario-metrics { grid-template-columns: 1fr 1fr; }
+  .scenario-editor, .commission-scenario-preview { padding: 16px; }
+  .commission-rate-input { width: 83px; }
+}
+
+.fee-chart-section { margin: 0 0 21px; }
+.fee-chart-section:last-child { margin-bottom: 0; }
+.fee-chart-section h4 { margin: 0 0 12px; color: var(--navy); font: 800 11px "Segoe UI", sans-serif; }
+.print-subsection { margin: 10px 0 16px; break-inside: avoid; }
+.print-subsection h3 { margin: 7px 0 5px; color: #254650; font-size: 10px; }
+.print-scenario-meta { margin: 0 0 8px; color: #667b82; font-size: 8px; line-height: 1.45; }
+@media print {
+  #printReport h2 { break-after: avoid; }
+  .print-subsection { break-inside: avoid; }
+  .print-table { font-size: 7px; }
+  .print-table th, .print-table td { padding: 4px 5px; }
+}

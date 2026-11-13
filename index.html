@@ -90,9 +90,12 @@ Assessoria Gama"></textarea>
         <div class="data-context" id="dataContext"></div>
         <div class="study-toolbar">
           <div><strong>Estudo atual</strong><span id="studyScopeLabel">Todas as assessorias · filtros do histórico aplicados</span></div>
-          <div class="study-actions">
-            <button class="button button-outline button-sm" id="exportStudyExcelBtn" type="button">↓ Exportar estudo Excel</button>
-            <button class="button button-primary button-sm" id="exportStudyPdfBtn" type="button">▤ Gerar relatório PDF</button>
+          <div class="study-actions export-menu-wrap">
+            <button class="button button-primary button-sm" id="exportMenuToggle" type="button" aria-haspopup="true" aria-expanded="false">↓ Exportar estudo <span aria-hidden="true">⌄</span></button>
+            <div class="export-menu hidden" id="exportMenu" role="menu" aria-label="Formatos de exportação">
+              <button type="button" id="exportExcelOption" role="menuitem"><strong>Excel (.xlsx)</strong><small>Abas com todos os dados e cenários</small></button>
+              <button type="button" id="exportPdfOption" role="menuitem"><strong>PDF</strong><small>Relatório pronto para impressão</small></button>
+            </div>
           </div>
         </div>
 
@@ -107,7 +110,6 @@ Assessoria Gama"></textarea>
           <button class="tab-button active" role="tab" aria-selected="true" data-tab="overview">Visão geral</button>
           <button class="tab-button" role="tab" aria-selected="false" data-tab="targets">Metas e evolução</button>
           <button class="tab-button" role="tab" aria-selected="false" data-tab="commissions">Comissões</button>
-          <button class="tab-button" role="tab" aria-selected="false" data-tab="policy">Política atual</button>
           <button class="tab-button" role="tab" aria-selected="false" data-tab="history">Histórico detalhado</button>
         </nav>
 
@@ -135,7 +137,7 @@ Assessoria Gama"></textarea>
           <article class="surface-card target-builder">
             <div class="builder-heading"><div><span class="step-number">1</span><div><h3>Escolha a base da meta</h3><p>Decida qual parte da recuperação será considerada.</p></div></div></div>
             <div class="builder-grid">
-              <div class="control-block"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto (ativo + cancelado)</option><option value="active">Somente recuperado ativo</option><option value="canceled">Somente recuperado cancelado</option><option value="combined">Ativo + cancelado (soma dos componentes)</option></select><small id="targetBasisHint">O indicador selecionado será usado na meta e na evolução.</small></div>
+              <div class="control-block"><label for="targetBasis">Indicador de recuperação</label><select id="targetBasis"><option value="recovered">Recuperado bruto</option><option value="active">Recuperado ativo</option><option value="canceled">Recuperado cancelado</option></select><small id="targetBasisHint">O indicador selecionado será usado na meta e na evolução.</small></div>
               <div class="control-block"><label for="baselineMode">Referência histórica</label><select id="baselineMode"><option value="average">Média mensal do período</option><option value="last">Último mês completo com dado</option></select><small>A referência usa somente meses com valor disponível para o indicador.</small></div>
               <div class="control-block"><label for="targetMode">Como deseja definir a meta?</label><select id="targetMode"><option value="history_growth">Crescimento sobre o histórico</option><option value="manual">Valor manual por assessoria</option><option value="monthly_growth">Aumento percentual a cada mês</option></select><small>Você pode alterar o método a qualquer momento.</small></div>
             </div>
@@ -163,7 +165,7 @@ Assessoria Gama"></textarea>
           </div>
           <div class="target-highlight" id="targetHighlight"></div>
           <article class="surface-card table-card">
-            <div class="card-heading"><div><h3>Metas por assessoria</h3><p>Edite diretamente as metas no modo manual. As demais colunas são recalculadas automaticamente.</p></div><button class="button button-outline button-sm" id="exportTargetsBtn" type="button">↓ Excel do estudo</button></div>
+            <div class="card-heading"><div><h3>Metas por assessoria</h3><p>Edite diretamente as metas no modo manual. As demais colunas são recalculadas automaticamente.</p></div></div>
             <div class="table-wrap"><table><thead><tr><th>Assessoria</th><th class="numeric">Referência mensal</th><th class="numeric">Meta mês 1</th><th class="numeric">Meta mês final</th><th class="numeric">Total projetado</th><th class="numeric">Aumento inicial</th></tr></thead><tbody id="targetsTableBody"></tbody></table></div>
             <p class="table-note" id="targetTableNote">A referência é calculada somente com os meses em que o indicador possui dado válido.</p>
           </article>
@@ -175,57 +177,61 @@ Assessoria Gama"></textarea>
 
         <section class="tab-panel hidden" id="panel-commissions" role="tabpanel">
           <div class="section-heading">
-            <div><p class="eyebrow">CONSTRUTOR DE INCENTIVOS</p><h2>Defina quando e quanto comissionar</h2><p>Crie faixas crescentes ou um gatilho que aumente a comissão de todos os valores quando a assessoria atingir determinado resultado.</p></div>
-            <span class="section-chip chip-accent">Não altera a política vigente</span>
+            <div><p class="eyebrow">LABORATÓRIO DE INCENTIVOS</p><h2>Quanto vale oferecer uma comissão melhor?</h2><p>Compare a política atual por aging com uma nova tabela liberada após a assessoria atingir uma meta de recuperação.</p></div>
+            <span class="section-chip chip-accent">Simulação média por aging</span>
           </div>
-          <div class="commission-layout">
-            <article class="surface-card rule-editor">
-              <div class="card-heading"><div><h3>Regra de comissão</h3><p>Configure o escopo e a mecânica de remuneração</p></div><span class="editor-icon">％</span></div>
-              <div class="rule-top-controls">
-                <div class="control-block"><label for="ruleScope">Tabela aplicada a</label><select id="ruleScope"><option value="ALL">Todas as assessorias</option></select></div>
-                <div class="control-block"><label for="commissionMode">Mecânica da comissão</label><select id="commissionMode"><option value="progressive">Percentual progressivo por faixa</option><option value="attained">Percentual da faixa atingida</option><option value="threshold_bonus">Gatilho: bônus ao atingir uma meta</option></select></div>
-                <div class="control-block"><label for="commissionBasis">Base de cálculo da comissão</label><select id="commissionBasis"><option value="target">Mesmo indicador da meta</option><option value="recovered">Recuperado bruto</option><option value="active">Somente ativo</option><option value="canceled">Somente cancelado</option><option value="combined">Ativo + cancelado</option></select></div>
-              </div>
-              <div class="mode-explainer" id="modeExplainer">Na forma progressiva, cada percentual incide apenas sobre a parcela do valor dentro daquela faixa.</div>
-              <div id="tierSettings">
-                <div class="tier-table-wrap"><table class="tier-table"><thead><tr><th>A partir de (R$)</th><th>Comissão (%)</th><th aria-label="Ações"></th></tr></thead><tbody id="tiersTableBody"></tbody></table></div>
-                <div class="rule-actions"><button class="button button-outline button-sm" id="addTierBtn" type="button">＋ Adicionar faixa</button><button class="text-button" id="resetRulesBtn" type="button">Restaurar taxa de referência</button></div>
-              </div>
-              <div id="triggerSettings" class="trigger-settings hidden">
-                <div class="trigger-callout"><strong>Como funciona:</strong> quando a assessoria alcançar o limite configurado, o bônus em pontos percentuais será aplicado sobre toda a base de comissão daquele mês — não apenas sobre o excedente.</div>
-                <div class="trigger-grid">
-                  <div class="control-block"><label for="triggerBasis">Indicador que libera o bônus</label><select id="triggerBasis"><option value="target">Mesmo indicador da meta</option><option value="recovered">Recuperado bruto</option><option value="active">Somente ativo</option><option value="canceled">Somente cancelado</option><option value="combined">Ativo + cancelado</option></select></div>
-                  <div class="control-block"><label for="triggerThreshold">Valor mínimo para liberar (R$)</label><input id="triggerThreshold" type="number" min="0" step="1000" value="500000"></div>
-                  <div class="control-block"><label for="triggerBaseRate">Comissão-base (%)</label><input id="triggerBaseRate" type="number" min="0" max="100" step="0.05" value="8"></div>
-                  <div class="control-block"><label for="triggerBonusRate">Acréscimo ao atingir (p.p.)</label><input id="triggerBonusRate" type="number" min="0" max="100" step="0.05" value="1"></div>
-                </div>
-                <div class="reference-rate" id="triggerReference"></div>
-              </div>
-              <div class="reference-rate" id="referenceRate"></div>
-              <div class="editor-footnote"><strong>Nota de interpretação:</strong> o histórico disponível é agregado por assessoria e mês, não contém a lista individual de títulos. O gatilho simula o efeito financeiro sobre o total da base escolhida; não faz auditoria ou recálculo título a título.</div>
-            </article>
-            <article class="surface-card commission-preview">
-              <div class="card-heading"><div><h3>Prévia financeira</h3><p>Impacto do cenário atual sobre o resultado projetado</p></div><span class="preview-tag">Mês 1</span></div>
-              <div id="commissionPreviewMetrics" class="preview-metrics"></div>
-              <div class="preview-foot" id="commissionPreviewFoot"></div>
-            </article>
-          </div>
-          <article class="surface-card table-card comparison-card">
-            <div class="card-heading"><div><h3>Comparativo por assessoria</h3><p>Comissão histórica média versus nova regra simulada</p></div><button class="button button-outline button-sm" id="exportCommissionBtn" type="button">↓ Excel do estudo</button></div>
-            <div class="table-wrap"><table><thead><tr><th>Assessoria</th><th class="numeric">Base de comissão</th><th class="numeric">Resultado do gatilho</th><th class="numeric">Taxa efetiva simulada</th><th class="numeric">Comissão simulada</th><th class="numeric">Variação de custo</th><th class="numeric">Líquido após comissão</th></tr></thead><tbody id="commissionTableBody"></tbody></table></div>
-            <p class="table-note">Os valores são projeções mensais. A comissão simulada não considera estornos, impostos, custos fixos, elegibilidade individual ou regras contratuais ainda não informadas.</p>
-          </article>
-        </section>
 
-        <section class="tab-panel hidden" id="panel-policy" role="tabpanel">
-          <div class="section-heading"><div><p class="eyebrow">REFERÊNCIA DO ARQUIVO</p><h2>Política atual por faixa de atraso</h2><p>Faixas lidas da seção “Política de Comissionamento” da planilha importada.</p></div><span class="section-chip">Somente leitura</span></div>
-          <div class="policy-callout"><span class="callout-symbol">i</span><p>Esta tabela é mantida como referência do modelo atual. Os novos cenários por volume recuperado ou por gatilho são independentes e não substituem automaticamente as regras B2C/B2B por atraso.</p></div>
-          <article class="surface-card table-card"><div class="card-heading"><div><h3>Percentuais por faixa de atraso</h3><p>Comissão conforme atraso do título</p></div><span class="policy-source" id="policySource">Origem: arquivo importado</span></div><div class="table-wrap"><table><thead><tr><th>Faixa de atraso (dias)</th><th class="numeric">Comissão B2C</th><th class="numeric">Comissão B2B</th></tr></thead><tbody id="policyTableBody"></tbody></table></div></article>
-          <div class="policy-foot" id="policyFoot"></div>
+          <article class="surface-card table-card current-policy-card">
+            <div class="card-heading"><div><h3>1. Tabela de comissão vigente</h3><p>Referência extraída da política atual do arquivo, sem alteração.</p></div><span class="policy-source" id="currentPolicySource">Origem: arquivo importado</span></div>
+            <div class="table-wrap"><table><thead><tr><th>Faixa de atraso (dias)</th><th class="numeric">Taxa atual B2C</th><th class="numeric">Taxa atual B2B</th></tr></thead><tbody id="currentPolicyTableBody"></tbody></table></div>
+          </article>
+
+          <div class="commission-scenario-layout">
+            <article class="surface-card scenario-editor">
+              <div class="card-heading"><div><h3>2. Configure uma condição para liberar a nova tabela</h3><p>Crie diferentes estudos, por assessoria e critério de desempenho.</p></div><span class="editor-icon">％</span></div>
+              <div class="scenario-management">
+                <div class="control-block"><label for="commissionScenarioSelect">Estudo salvo nesta sessão</label><select id="commissionScenarioSelect"></select></div>
+                <div class="scenario-management-actions"><button class="button button-outline button-sm" id="newCommissionScenarioBtn" type="button">＋ Novo estudo</button><button class="button button-quiet button-sm" id="deleteCommissionScenarioBtn" type="button">Excluir</button></div>
+              </div>
+              <div class="scenario-form-grid">
+                <div class="control-block scenario-name-block"><label for="commissionScenarioName">Nome do estudo</label><input id="commissionScenarioName" type="text" maxlength="90" placeholder="Ex.: Agius — incentivo cancelado"></div>
+                <div class="control-block"><label for="commissionAgency">Assessoria avaliada</label><select id="commissionAgency"></select></div>
+                <div class="control-block"><label for="commissionTriggerBasis">Indicador para atingir a meta</label><select id="commissionTriggerBasis"><option value="canceled">Recuperado cancelado</option><option value="active">Recuperado ativo</option><option value="recovered">Recuperado bruto</option></select></div>
+                <div class="control-block"><label for="commissionTargetMode">Como definir o gatilho?</label><select id="commissionTargetMode"><option value="portfolio_percent">Percentual da carteira cancelada</option><option value="fixed_amount">Valor bruto de recuperação (R$)</option></select></div>
+                <div class="control-block" id="commissionPortfolioField"><label for="commissionPortfolioValue">Carteira cancelada da assessoria (R$)</label><input id="commissionPortfolioValue" type="number" min="0" step="1000" placeholder="Informe o saldo cancelado"><small>Este valor não existe no histórico mensal; informe o saldo atualizado da carteira.</small></div>
+                <div class="control-block" id="commissionPercentField"><label for="commissionTargetPercent">Percentual da carteira a recuperar</label><div class="inline-suffix"><input id="commissionTargetPercent" type="number" min="0" max="100" step="0.1" value="10"><span>%</span></div></div>
+                <div class="control-block hidden" id="commissionFixedField"><label for="commissionTargetAmount">Meta de recuperação (R$)</label><input id="commissionTargetAmount" type="number" min="0" step="1000" placeholder="Ex.: 300000"></div>
+              </div>
+              <div class="scenario-sentence" id="commissionScenarioSentence">Selecione uma assessoria e informe a carteira para calcular a meta de desbloqueio.</div>
+              <p class="table-note scenario-method-note">A recuperação média atual usa o período selecionado. Se ela já superar o gatilho, a recuperação adicional será zero e o custo será avaliado sobre a média atual. O aging e a composição CPF/CNPJ são estimados pela distribuição histórica da assessoria.</p>
+            </article>
+            <article class="surface-card commission-scenario-preview">
+              <div class="card-heading"><div><h3>3. Impacto estimado ao atingir o gatilho</h3><p>Projeção mensal comparada ao patamar atual.</p></div><span class="preview-tag">Cenário-alvo</span></div>
+              <div id="commissionScenarioMetrics" class="scenario-metrics"></div>
+              <div id="commissionScenarioDisclaimer" class="preview-foot"></div>
+            </article>
+          </div>
+
+          <article class="surface-card table-card commission-rates-card">
+            <div class="card-heading"><div><h3>4. Monte a nova tabela por aging</h3><p>As taxas atuais são preservadas para comparação. Edite as novas taxas B2C e B2B para simular o incentivo.</p></div><span class="section-chip">Taxas editáveis</span></div>
+            <div class="table-wrap"><table class="commission-rates-table"><thead><tr><th>Faixa de atraso</th><th class="numeric">Mix histórico</th><th class="numeric">Atual B2C</th><th class="numeric">Atual B2B</th><th class="numeric">Nova B2C</th><th class="numeric">Nova B2B</th></tr></thead><tbody id="commissionRatesTableBody"></tbody></table></div>
+            <p class="table-note">O mix histórico é a participação de cada aging nos valores recuperados da assessoria, no período selecionado. O sistema mantém a distribuição observada e aplica as novas taxas sobre o resultado-alvo.</p>
+          </article>
+
+          <article class="surface-card commission-chart-card">
+            <div class="card-heading"><div><h3>5. Impacto em recuperação e comissão</h3><p>Compare a recuperação média com a meta de desbloqueio e veja o custo da tabela atual frente à nova.</p></div></div>
+            <div id="commissionFeeChart" class="fee-chart"></div>
+          </article>
+
+          <article class="surface-card table-card comparison-card">
+            <div class="card-heading"><div><h3>Memória de cálculo por aging</h3><p>Distribuição estimada do resultado-alvo e comissão calculada em cada faixa.</p></div></div>
+            <div class="table-wrap"><table><thead><tr><th>Faixa</th><th class="numeric">Participação</th><th class="numeric">Recuperação estimada</th><th class="numeric">Comissão atual</th><th class="numeric">Nova comissão</th><th class="numeric">Diferença</th></tr></thead><tbody id="commissionAgingBreakdownBody"></tbody></table></div>
+          </article>
+          <div class="policy-callout commission-assumption"><span class="callout-symbol">i</span><p><strong>Premissa da estimativa:</strong> o arquivo informa o valor recuperado por aging e a divisão geral de recuperação entre CPF e CNPJ, mas não cruza simultaneamente aging, CPF/CNPJ e situação ativa/cancelada. Para estimar o custo, o simulador aplica a distribuição média de aging da assessoria e sua composição média CPF/CNPJ ao valor-alvo, tratando CPF como B2C e CNPJ como B2B — hipótese que deve ser validada com a regra interna. É uma projeção gerencial, não um cálculo exato por título. A carteira cancelada deve ser informada manualmente quando o gatilho for percentual.</p></div>
         </section>
 
         <section class="tab-panel hidden" id="panel-history" role="tabpanel">
-          <div class="section-heading"><div><p class="eyebrow">DADOS DE ORIGEM</p><h2>Histórico detalhado</h2><p>Registros utilizados nas análises. Linhas de totalização do Excel são ignoradas para evitar duplicidade.</p></div><button class="button button-outline button-sm" id="exportHistoryBtn" type="button">↓ Exportar estudo Excel</button></div>
+          <div class="section-heading"><div><p class="eyebrow">DADOS DE ORIGEM</p><h2>Histórico detalhado</h2><p>Registros utilizados nas análises. Linhas de totalização do Excel são ignoradas para evitar duplicidade.</p></div></div>
           <div class="history-toolbar"><div class="history-search"><span>⌕</span><input type="search" id="historySearch" placeholder="Buscar assessoria ou mês" aria-label="Buscar assessoria ou mês"></div><span class="history-count" id="historyCount"></span></div>
           <article class="surface-card table-card"><div class="table-wrap history-table-wrap"><table><thead><tr><th>Assessoria</th><th>Mês</th><th class="numeric">Cobrança</th><th class="numeric">Recuperado bruto</th><th class="numeric">Ativo</th><th class="numeric">Cancelado</th><th class="numeric">Comissão</th><th class="numeric">Conversão</th><th class="numeric">Custo / recuperação</th></tr></thead><tbody id="historyTableBody"></tbody></table></div></article>
         </section>
