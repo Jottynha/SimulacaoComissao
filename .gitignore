@@ -1,0 +1,16 @@
+# Arquivos confidenciais: nunca adicionar ao repositório
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.xlsb
+
+# Diretórios locais de dados e exportações
+/data/
+/historico/
+/exportacoes/
+
+# Arquivos do sistema/editor
+.DS_Store
+Thumbs.db
+.vscode/
