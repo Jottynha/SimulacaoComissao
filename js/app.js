@@ -1,5 +1,5 @@
 /*
- * Central de Recuperação — módulo Assessorias.
+ * Simulador Cobranças Master — módulo Assessorias.
  * O Excel e as simulações são processados somente na memória do navegador.
  */
 (() => {
@@ -32,7 +32,7 @@
     baselineMode: 'average', targetBasis: 'recovered', targetMode: 'history_growth',
     growth: 10, monthlyGrowthRate: 2, monthlyInitialGrowth: 0, projectionMonths: 12,
     manualTargets: {}, manualDefault: null,
-    activeTab: 'overview',
+    activeTab: 'overview', activeModule: 'assessorias',
     agingByAgency: {}, commissionScenarios: [], activeCommissionScenarioId: null, commissionScenarioCounter: 1
   };
 
@@ -386,6 +386,7 @@
       $('#historyFilters').classList.remove('hidden');
       $('#dataContext').innerHTML = `<strong>${esc(fileName)}</strong> · ${state.agencies.length} assessorias · ${MONTHS[first - 1].short} a ${MONTHS[last - 1].short}${yearText} · ${partialCount} linha(s) parcial(is)`;
       renderAll();
+      activateModule('assessorias');
       activateTab('overview');
       toast('Histórico carregado. As simulações estão prontas.');
     } catch (error) {
@@ -481,6 +482,53 @@
         : 'A meta mensal é a referência histórica acrescida do percentual inicial.';
   }
 
+  function buildTargetEvolutionSvg(targets) {
+    const months = state.projectionMonths;
+    const planned = Array.from({ length: months }, (_, index) => sumOrNull(targets.map(row => row.schedule[index])));
+    const historicReference = state.hasHistory ? sumOrNull(targets.map(row => row.baseline)) : null;
+    const initialReference = sumOrNull(targets.map(row => row.schedule[0]));
+    const reference = Number.isFinite(historicReference) ? historicReference : initialReference;
+    const validValues = [...planned.filter(Number.isFinite), ...(Number.isFinite(reference) ? [reference] : [])];
+    if (!validValues.length) return '<div class="chart-empty">Informe uma meta inicial para visualizar a projeção.</div>';
+
+    const width = 1000;
+    const height = 320;
+    const left = 92;
+    const right = 34;
+    const top = 24;
+    const bottom = 54;
+    const plotW = width - left - right;
+    const plotH = height - top - bottom;
+    const maxValue = Math.max(1, ...validValues) * 1.12;
+    const x = index => months <= 1 ? left + plotW / 2 : left + (index / (months - 1)) * plotW;
+    const y = value => top + plotH - (Math.max(0, value) / maxValue) * plotH;
+    const pathFor = values => values.map((value, index) => `${index ? 'L' : 'M'} ${x(index).toFixed(1)} ${y(Number.isFinite(value) ? value : 0).toFixed(1)}`).join(' ');
+    const targetPath = pathFor(planned);
+    const grid = Array.from({ length: 5 }, (_, index) => {
+      const value = maxValue * (4 - index) / 4;
+      const yy = y(value);
+      const label = value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 });
+      return `<g><line x1="${left}" y1="${yy}" x2="${width-right}" y2="${yy}" stroke="#E4EAF1" stroke-width="1"/><text x="${left-12}" y="${yy+4}" text-anchor="end" fill="#7C8998" font-size="12">${label}</text></g>`;
+    }).join('');
+    const xLabels = Array.from({ length: months }, (_, index) => {
+      const show = months <= 12 || index === 0 || index === months - 1 || index % Math.ceil(months / 10) === 0;
+      return show ? `<text x="${x(index)}" y="${height-20}" text-anchor="middle" fill="#7C8998" font-size="12">M${index+1}</text>` : '';
+    }).join('');
+    const targetPoints = planned.map((value, index) => Number.isFinite(value) ? `<circle cx="${x(index)}" cy="${y(value)}" r="4.5" fill="#1F5DA8" stroke="#FFFFFF" stroke-width="2"><title>Mês ${index+1}: ${money(value)}</title></circle>` : '').join('');
+    const referenceLine = Number.isFinite(reference)
+      ? `<line x1="${left}" y1="${y(reference)}" x2="${width-right}" y2="${y(reference)}" stroke="#E2B52D" stroke-width="3" stroke-dasharray="9 7"/><text x="${width-right}" y="${Math.max(14, y(reference)-9)}" text-anchor="end" fill="#A27B0B" font-size="12" font-weight="700">Referência ${money(reference, true)}</text>`
+      : '';
+    const referenceLabel = Number.isFinite(historicReference) ? 'Referência histórica mensal' : 'Patamar inicial';
+    return `<div class="chart-legend"><span><i class="legend-blue"></i>Meta projetada</span><span><i class="legend-yellow"></i>${referenceLabel}</span></div>
+      <svg viewBox="0 0 ${width} ${height}" class="target-chart-svg" role="img" aria-label="Meta projetada ao longo de ${months} meses, comparada à referência mensal">
+        ${grid}
+        ${referenceLine}
+        <path d="${targetPath}" fill="none" stroke="#1F5DA8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        ${targetPoints}
+        ${xLabels}
+      </svg>`;
+  }
+
   function renderTargets() {
     $('#targetMode').value = state.targetMode;
     $('#targetBasis').value = state.targetBasis;
@@ -507,6 +555,8 @@
       <div class="target-kpi"><span>Meta consolidada · mês 1</span><strong>${money(totalStart, true)}</strong></div>
       <div class="target-kpi"><span>Meta no mês final</span><strong>${money(totalFinal, true)}</strong></div>
       <div class="target-kpi"><span>Total projetado · ${state.projectionMonths} meses</span><strong>${money(totalProjection, true)}</strong></div>`;
+
+    $('#targetEvolutionChart').innerHTML = buildTargetEvolutionSvg(targets);
 
     $('#targetsTableBody').innerHTML = targets.length ? targets.map(row => `
       <tr>
@@ -809,6 +859,35 @@
     $('#studyScopeLabel').textContent = `${state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter} · ${state.hasHistory ? `${MONTHS[state.startMonth - 1].short} a ${MONTHS[state.endMonth - 1].short}` : 'cenário manual sem histórico'}`;
   }
 
+  function activateModule(moduleKey) {
+    const isAssessorias = moduleKey === 'assessorias';
+    state.activeModule = moduleKey;
+    document.querySelectorAll('.module-button').forEach(button => {
+      const active = button.dataset.module === moduleKey;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+
+    $('#assessoriasHeading').classList.toggle('hidden', !isAssessorias);
+    $('#privacyStrip').classList.toggle('hidden', !isAssessorias);
+    $('#statusLine').classList.toggle('hidden', !isAssessorias);
+    $('#emptyState').classList.toggle('hidden', !isAssessorias || state.agencies.length > 0);
+    $('#workspace').classList.toggle('hidden', !isAssessorias || state.agencies.length === 0);
+    $('#modulePlaceholder').classList.toggle('hidden', isAssessorias);
+
+    const moduleInfo = {
+      b2b: { title: 'B2B', text: 'Estudos de recuperação, metas e regras de comissão B2B serão adicionados nesta página.' },
+      cobranca: { title: 'Cobrança interna', text: 'Indicadores e simulações da operação interna serão adicionados nesta página.' },
+      carteira: { title: 'Carteira', text: 'Análises de composição, aging e evolução da carteira serão adicionadas nesta página.' }
+    };
+    if (!isAssessorias) {
+      const info = moduleInfo[moduleKey] || moduleInfo.b2b;
+      $('#modulePlaceholderTitle').textContent = info.title;
+      $('#modulePlaceholderText').textContent = info.text;
+    }
+  }
+
   function activateTab(tab) {
     state.activeTab = tab;
     document.querySelectorAll('.tab-button').forEach(button => {
@@ -974,12 +1053,12 @@
     const policyRows = state.policy.map(row => `<tr><td>${esc(row.range)}</td><td>${percentPoints(row.b2c * 100)}</td><td>${percentPoints(row.b2b * 100)}</td></tr>`).join('');
     const historyRows = filteredHistory.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(row.monthName)}${row.partial ? ' · parcial' : ''}</td><td>${money(row.collection)}</td><td>${money(row.recovered)}</td><td>${money(row.active)}</td><td>${money(row.canceled)}</td><td>${money(row.commission)}</td><td>${percent(row.conversion)}</td><td>${percent(row.costRatio)}</td></tr>`).join('');
     $('#printReport').innerHTML = `
-      <header class="print-header"><div><div class="print-kicker">CENTRAL DE RECUPERAÇÃO · MÓDULO ASSESSORIAS</div><h1>Estudo de metas e remuneração</h1><p>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p></div><div class="print-period">${esc(period)}</div></header>
+      <header class="print-header"><div><div class="print-kicker">SIMULADOR COBRANÇAS MASTER · ASSESSORIAS</div><h1>Simulador Cobranças Master</h1><p>Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p></div><div class="print-period">${esc(period)}</div></header>
       <section class="print-meta"><div><span>Arquivo de origem</span><strong>${esc(state.fileName || 'Cenário manual')}</strong></div><div><span>Indicador da meta</span><strong>${esc(BASIS_LABELS[state.targetBasis])}</strong></div><div><span>Método</span><strong>${esc(MODE_LABELS[state.targetMode])}</strong></div><div><span>Filtro</span><strong>${esc(state.agencyFilter === 'ALL' ? 'Todas as assessorias' : state.agencyFilter)}</strong></div></section>
       <section class="print-kpis"><div><span>Meta total mês 1</span><strong>${money(totals.start)}</strong></div><div><span>Meta mês final</span><strong>${money(totals.final)}</strong></div><div><span>Total projetado</span><strong>${money(totals.projection)}</strong></div><div><span>Cenários de comissão</span><strong>${commissionScenarios.length}</strong></div></section>
       <h2>1. Visão geral por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Meses</th><th>Bruto total</th><th>Média bruto</th><th>Ativo total</th><th>Média ativo</th><th>Cancelado total</th><th>Média cancelado</th><th>Comissão</th><th>Custo efetivo</th></tr></thead><tbody>${performanceRows || '<tr><td colspan="10">Sem histórico disponível.</td></tr>'}</tbody></table>
       <h2>2. Metas por assessoria</h2><table class="print-table"><thead><tr><th>Assessoria</th><th>Indicador</th><th>Referência</th><th>Meta mês 1</th><th>Meta mês final</th><th>Total projetado</th></tr></thead><tbody>${targets.map(row => `<tr><td>${esc(row.agency)}</td><td>${esc(BASIS_LABELS[state.targetBasis])}</td><td>${money(row.baseline)}</td><td>${money(row.targetStart)}</td><td>${money(row.targetFinal)}</td><td>${money(row.totalProjection)}</td></tr>`).join('') || '<tr><td colspan="6">Nenhuma meta configurada.</td></tr>'}</tbody></table>
-      <h2>3. Evolução mensal consolidada</h2><table class="print-table"><thead><tr><th>Período</th><th>Meta total</th></tr></thead><tbody>${evolutionRows}</tbody></table>
+      <h2>3. Evolução mensal consolidada</h2><div class="print-chart">${buildTargetEvolutionSvg(targets)}</div><table class="print-table"><thead><tr><th>Período</th><th>Meta total</th></tr></thead><tbody>${evolutionRows}</tbody></table>
       <h2>4. Comparação dos cenários de comissão</h2><table class="print-table"><thead><tr><th>Estudo</th><th>Assessoria</th><th>Indicador</th><th>Meta</th><th>Patamar avaliado</th><th>Recuperação adicional</th><th>Comissão atual</th><th>Nova comissão</th><th>Custo incremental</th><th>Saldo após comissão</th></tr></thead><tbody>${scenarioSummary || '<tr><td colspan="10">Nenhum cenário criado.</td></tr>'}</tbody></table>
       <h2>5. Memória de cálculo por aging de todos os cenários</h2>${scenarioDetails || '<p>Nenhum estudo de comissão salvo nesta sessão.</p>'}
       <h2>6. Política atual por aging</h2><table class="print-table"><thead><tr><th>Faixa de atraso</th><th>Comissão B2C</th><th>Comissão B2B</th></tr></thead><tbody>${policyRows || '<tr><td colspan="3">Política atual não importada.</td></tr>'}</tbody></table>
@@ -1050,6 +1129,7 @@
     $('#statusFile').textContent = '';
     setStatus(`Cenário livre criado com ${state.agencies.length} assessoria(s). Informe as metas na tabela.`, 'success');
     renderAll();
+    activateModule('assessorias');
     activateTab('targets');
     toast('Cenário manual pronto.');
   }
@@ -1105,6 +1185,7 @@
       renderAll();
     });
     $('#includePartial').addEventListener('change', event => { state.includePartial = event.target.checked; renderAll(); });
+    document.querySelectorAll('.module-button').forEach(button => button.addEventListener('click', () => activateModule(button.dataset.module)));
     document.querySelectorAll('.tab-button').forEach(button => button.addEventListener('click', () => activateTab(button.dataset.tab)));
     $('#goTargetsBtn').addEventListener('click', () => activateTab('targets'));
 
@@ -1175,5 +1256,6 @@
   }
 
   bindEvents();
+  activateModule('assessorias');
   tryLoadLocalHistory();
 })();

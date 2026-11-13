@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#102b35">
-  <meta name="description" content="Simulador local de metas e comissões para assessorias de cobrança.">
-  <title>Central de Recuperação | Assessorias</title>
+  <meta name="theme-color" content="#17457F">
+  <meta name="description" content="Simulador Cobranças Master — estudos de metas e comissões.">
+  <title>Simulador Cobranças Master</title>
   <link rel="stylesheet" href="./css/styles.css">
   <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script defer src="./js/app.js"></script>
@@ -13,22 +13,34 @@
 <body>
   <div class="app-frame">
     <header class="topbar">
-      <a class="brand" href="#inicio" aria-label="Central de recuperação - início">
-        <span class="brand-mark">R</span>
-        <span class="brand-copy"><strong>RECUPERAÇÃO</strong><small>INTELIGÊNCIA DE COBRANÇA</small></span>
+      <a class="brand" href="#inicio" aria-label="Simulador Cobranças Master - início">
+        <span class="brand-mark">M</span>
+        <span class="brand-copy"><strong>Simulador Cobranças Master</strong></span>
       </a>
       <div class="topbar-right">
-        <span class="local-indicator"><i></i> Processamento local</span>
-        <button class="button button-light button-sm" id="importTopBtn" type="button">＋ Importar histórico</button>
+        <a class="documentation-link" href="./README.html" target="_blank" rel="noopener">Documentação</a>
+        <span class="local-indicator"><i></i> Dados locais</span>
+        <button class="button button-light button-sm" id="importTopBtn" type="button">＋ Importar Excel</button>
       </div>
     </header>
 
     <main class="main-content" id="inicio">
-      <section class="page-heading">
+      <nav class="module-nav" id="moduleNav" aria-label="Páginas do simulador">
+        <button class="module-button active" type="button" data-module="assessorias" aria-current="page"><span class="module-symbol">▦</span><span>Assessorias</span></button>
+        <button class="module-button" type="button" data-module="b2b"><span class="module-symbol">▤</span><span>B2B</span><small>Em desenvolvimento</small></button>
+        <button class="module-button" type="button" data-module="cobranca"><span class="module-symbol">◷</span><span>Cobrança interna</span><small>Em desenvolvimento</small></button>
+        <button class="module-button" type="button" data-module="carteira"><span class="module-symbol">▣</span><span>Carteira</span><small>Em desenvolvimento</small></button>
+      </nav>
+
+      <section class="module-placeholder hidden" id="modulePlaceholder" aria-live="polite">
+        <div class="placeholder-mark">⌁</div>
+        <span class="development-badge">Em desenvolvimento</span>
+        <h1 id="modulePlaceholderTitle">B2B</h1>
+        <p id="modulePlaceholderText">Esta página será disponibilizada em uma próxima etapa do simulador.</p>
+      </section>
+      <section class="page-heading" id="assessoriasHeading">
         <div>
-          <p class="eyebrow">CENTRAL DE SIMULAÇÃO</p>
-          <h1>Metas e remuneração<br class="mobile-break"> da recuperação</h1>
-          <p class="heading-description">Construa cenários livremente, compare modelos de incentivo e avalie o impacto financeiro antes de propor novas regras.</p>
+          <h1>Assessorias</h1>
         </div>
         <div class="heading-actions">
           <button class="button button-primary" id="importMainBtn" type="button">↑ Selecionar arquivo Excel</button>
@@ -37,9 +49,9 @@
         </div>
       </section>
 
-      <section class="privacy-strip" aria-label="Aviso de privacidade">
+      <section class="privacy-strip" id="privacyStrip" aria-label="Privacidade dos dados">
         <span class="privacy-icon">⌑</span>
-        <p><strong>Arquivo confidencial protegido.</strong> A planilha é lida no seu navegador. Nenhum dado do Excel é enviado, armazenado em servidor ou incluído no projeto do GitHub.</p>
+        <p><strong>Processamento local.</strong> O Excel não é enviado ao GitHub Pages.</p>
       </section>
 
       <div class="status-line" id="statusLine" role="status" aria-live="polite">
@@ -55,8 +67,8 @@
         </div>
         <div class="empty-copy">
           <p class="eyebrow">PRIMEIRO ACESSO</p>
-          <h2>Comece pelo histórico ou simule com valores próprios</h2>
-          <p>Selecione o Excel que contém a aba <strong>“Histórico Assessorias”</strong>. Depois, você poderá usar os números históricos como referência ou substituí-los por metas e regras inteiramente manuais.</p>
+          <h2>Comece uma simulação</h2>
+          <p>Importe o histórico ou crie um cenário com valores próprios.</p>
           <div class="empty-actions">
             <button class="button button-primary" id="emptyImportBtn" type="button">Selecionar histórico <span>→</span></button>
             <button class="button button-outline" id="createManualScenarioBtn" type="button">Criar cenário sem histórico</button>
@@ -69,15 +81,11 @@ Assessoria Beta
 Assessoria Gama"></textarea>
             <button class="button button-primary" id="confirmManualScenarioBtn" type="button">Criar cenário livre</button>
           </div>
-          <div class="empty-hints"><span>✓ Arquivo .xlsx ou .xls</span><span>✓ Não altera o arquivo original</span><span>✓ Dados permanecem nesta sessão</span></div>
+          <div class="empty-hints"><span>✓ Excel .xlsx ou .xls</span><span>✓ Arquivo original preservado</span><span>✓ Dados nesta sessão</span></div>
         </div>
       </section>
 
       <div class="workspace hidden" id="workspace">
-        <nav class="module-nav" aria-label="Módulos da central">
-          <button class="module-button active" type="button" aria-current="page"><span class="module-symbol">▦</span><span>Assessorias</span></button>
-          <button class="module-button module-disabled" type="button" disabled aria-disabled="true"><span class="module-symbol">▤</span><span>B2B</span><small>Em desenvolvimento</small></button>
-        </nav>
 
         <section class="filter-bar" id="historyFilters" aria-label="Filtros do histórico">
           <div class="filter-intro"><span class="filter-glyph">≡</span><div><strong>Recorte do histórico</strong><small>Referência usada nas análises históricas</small></div></div>
@@ -164,6 +172,10 @@ Assessoria Gama"></textarea>
             <div class="agency-add-controls"><input id="newAgencyName" type="text" maxlength="80" placeholder="Nome da assessoria" aria-label="Nome da nova assessoria"><button class="button button-outline button-sm" id="addAgencyBtn" type="button">＋ Adicionar</button></div>
           </div>
           <div class="target-highlight" id="targetHighlight"></div>
+          <article class="surface-card target-chart-card" id="targetChartCard">
+            <div class="card-heading"><div><h3>Evolução projetada</h3><p>Meta mensal comparada à referência.</p></div><span class="section-chip">Projeção</span></div>
+            <div id="targetEvolutionChart" class="target-evolution-chart" role="img" aria-label="Gráfico de evolução mensal das metas"></div>
+          </article>
           <article class="surface-card table-card">
             <div class="card-heading"><div><h3>Metas por assessoria</h3><p>Edite diretamente as metas no modo manual. As demais colunas são recalculadas automaticamente.</p></div></div>
             <div class="table-wrap"><table><thead><tr><th>Assessoria</th><th class="numeric">Referência mensal</th><th class="numeric">Meta mês 1</th><th class="numeric">Meta mês final</th><th class="numeric">Total projetado</th><th class="numeric">Aumento inicial</th></tr></thead><tbody id="targetsTableBody"></tbody></table></div>
@@ -237,7 +249,7 @@ Assessoria Gama"></textarea>
         </section>
       </div>
 
-      <footer class="app-footer"><span>Central de Recuperação <b>·</b> Módulo Assessorias</span><span>Uso interno · Dados processados no dispositivo</span></footer>
+      <footer class="app-footer"><span>Simulador Cobranças Master</span><a href="./README.html" target="_blank" rel="noopener">Documentação</a> <a href="./README.md" target="_blank" rel="noopener">README.md</a></footer>
     </main>
   </div>
   <section id="printReport" aria-hidden="true"></section>

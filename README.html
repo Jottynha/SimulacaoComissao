@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17457F">
+  <title>Documentação | Simulador Cobranças Master</title>
+  <style>
+    :root { color-scheme: light; --blue:#173F73; --blue2:#1F5DA8; --yellow:#F2C94C; --ink:#263548; --muted:#69798B; --line:#DCE4ED; --paper:#F3F5F8; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:15px/1.7 "Segoe UI",system-ui,sans-serif; }
+    header { background:var(--blue); color:#fff; padding:22px max(22px,calc((100vw - 960px)/2)); display:flex; align-items:center; justify-content:space-between; gap:18px; }
+    header strong { font-size:17px; letter-spacing:-.02em; }
+    header a { color:#fff; font-size:12px; font-weight:700; text-decoration:none; border:1px solid #ffffff55; border-radius:8px; padding:8px 11px; white-space:nowrap; }
+    header a:hover { color:var(--yellow); border-color:var(--yellow); }
+    main { width:min(960px,calc(100% - 32px)); margin:28px auto 56px; padding:clamp(22px,4vw,48px); border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 12px 34px #173f730d; }
+    h1,h2,h3 { color:var(--blue); line-height:1.25; }
+    h1 { font-size:clamp(25px,4vw,36px); margin:0 0 18px; letter-spacing:-.04em; }
+    h2 { margin:38px 0 12px; padding-top:18px; border-top:1px solid var(--line); font-size:21px; letter-spacing:-.02em; }
+    h3 { margin:23px 0 8px; font-size:16px; }
+    p,li { color:#4F5F72; }
+    strong { color:#293D58; }
+    a { color:var(--blue2); }
+    table { width:100%; border-collapse:collapse; margin:14px 0 20px; font-size:13px; }
+    th { background:#EEF3F9; color:var(--blue); text-align:left; font-weight:800; }
+    th,td { padding:10px 12px; border:1px solid var(--line); vertical-align:top; }
+    code { padding:2px 5px; border-radius:5px; background:#F1F4F8; color:#17457F; font-size:.92em; }
+    pre { overflow-x:auto; padding:15px; border-radius:9px; background:#172F4D; color:#F5F7FA; }
+    pre code { padding:0; color:inherit; background:transparent; }
+    blockquote { margin:18px 0; padding:5px 16px; border-left:4px solid var(--yellow); background:#FFFAE8; }
+    hr { border:0; border-top:1px solid var(--line); margin:28px 0; }
+    .doc-links { display:flex; flex-wrap:wrap; gap:10px; margin:22px 0 0; }
+    .doc-links a { display:inline-block; padding:9px 12px; border:1px solid var(--line); border-radius:8px; text-decoration:none; font-size:12px; font-weight:700; }
+    .doc-links a:first-child { color:#fff; border-color:var(--blue2); background:var(--blue2); }
+    footer { margin-top:35px; padding-top:16px; border-top:1px solid var(--line); color:#8793A1; font-size:12px; }
+    @media(max-width:600px) { header { align-items:flex-start; flex-direction:column; } main { width:calc(100% - 20px); margin:10px auto 28px; padding:18px; } table { display:block; overflow-x:auto; } th,td { min-width:140px; } }
+  </style>
+</head>
+<body>
+  <header><strong>Simulador Cobranças Master · Documentação</strong><a href="./index.html">← Voltar ao simulador</a></header>
+  <main>
+    <h1>Simulador Cobranças Master</h1>
+<p>Aplicação web estática para estudar metas de recuperação e modelos de comissão de assessorias. Foi desenvolvida em HTML, CSS e JavaScript e pode ser publicada no GitHub Pages.</p>
+<h2>1. Estrutura do sistema</h2>
+<p>A navegação superior organiza o simulador por áreas:</p>
+<table>
+<thead>
+<tr>
+  <th>Página</th>
+  <th>Situação</th>
+  <th>Finalidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>Assessorias</strong></td>
+  <td>Disponível</td>
+  <td>Análise histórica, metas, evolução e estudos de comissão por aging.</td>
+</tr>
+<tr>
+  <td><strong>B2B</strong></td>
+  <td>Em desenvolvimento</td>
+  <td>Área reservada para análises e regras específicas de B2B.</td>
+</tr>
+<tr>
+  <td><strong>Cobrança interna</strong></td>
+  <td>Em desenvolvimento</td>
+  <td>Área reservada para indicadores e simulações da operação interna.</td>
+</tr>
+<tr>
+  <td><strong>Carteira</strong></td>
+  <td>Em desenvolvimento</td>
+  <td>Área reservada para composição, aging e evolução da carteira.</td>
+</tr>
+</tbody>
+</table>
+<p>As páginas futuras já possuem navegação e telas próprias, mas ainda não executam cálculos.</p>
+<h2>2. Como iniciar</h2>
+<h3>Com histórico</h3>
+<ol>
+<li>Acesse <strong>Assessorias</strong>.</li>
+<li>Selecione <strong>Importar Excel</strong>.</li>
+<li>Escolha a planilha de histórico no computador.</li>
+<li>O arquivo deve conter a aba <code>Histórico Assessorias</code>.</li>
+<li>O simulador apresenta os indicadores e libera os filtros por assessoria e período.</li>
+</ol>
+<p>A leitura é feita no navegador. O arquivo não é enviado ao GitHub Pages e não deve ser adicionado ao repositório.</p>
+<h3>Sem histórico</h3>
+<ol>
+<li>Selecione <strong>Criar cenário sem histórico</strong>.</li>
+<li>Informe uma ou mais assessorias, uma por linha.</li>
+<li>Defina as metas na área <strong>Metas e evolução</strong>.</li>
+</ol>
+<p>Este modo permite testar valores hipotéticos antes de ter dados históricos. As comparações com histórico e a estimativa de comissão por aging ficam limitadas quando não há uma base importada.</p>
+<h2>3. Indicadores de recuperação</h2>
+<p>O simulador trabalha com três indicadores independentes:</p>
+<ul>
+<li><strong>Recuperado bruto:</strong> valor bruto recuperado registrado no histórico.</li>
+<li><strong>Recuperado ativo:</strong> valor recuperado classificado como ativo.</li>
+<li><strong>Recuperado cancelado:</strong> valor recuperado classificado como cancelado.</li>
+</ul>
+<p>O bruto é um indicador próprio. Não é criado somando ativo e cancelado, pois a planilha pode possuir critérios de apuração distintos ou campos não preenchidos.</p>
+<p>Campos sem informação são tratados como ausentes, não como zero. Isso evita reduzir médias por causa de meses ou indicadores não apurados.</p>
+<h2>4. Filtros e período de análise</h2>
+<p>Quando há histórico, os filtros permitem selecionar uma assessoria ou todas, o mês inicial, o mês final e a inclusão de meses parciais.</p>
+<p>Meses parciais ficam excluídos por padrão. Alterar o recorte atualiza os indicadores e as análises que dependem do histórico. A simulação de comissão utiliza a média do período selecionado para a assessoria escolhida.</p>
+<h2>5. Metas e evolução</h2>
+<p>A área <strong>Metas e evolução</strong> permite escolher o indicador (bruto, ativo ou cancelado), a referência histórica e o método da meta.</p>
+<h3>Referência histórica</h3>
+<p>A referência pode ser:</p>
+<ul>
+<li><strong>Média mensal do período:</strong> média dos meses que possuem valor válido para o indicador.</li>
+<li><strong>Último mês completo com dado:</strong> valor do mês mais recente disponível no recorte.</li>
+</ul>
+<p>Meses sem valor válido não entram no cálculo da média.</p>
+<h3>Métodos de definição da meta</h3>
+<p><strong>Crescimento sobre o histórico</strong></p>
+<p>Aplica um percentual sobre a referência. Exemplo: referência mensal de R$ 100.000 e aumento de 10% resultam em uma meta mensal de R$ 110.000. A meta permanece constante ao longo do horizonte projetado.</p>
+<p><strong>Valor manual por assessoria</strong></p>
+<p>Permite informar a meta mensal de cada assessoria. Também é possível preencher todas com um mesmo valor e, depois, editar uma por uma. O valor não precisa acompanhar a referência histórica.</p>
+<p><strong>Aumento percentual a cada mês</strong></p>
+<p>Define um valor inicial e uma taxa composta mensal. Exemplo: meta inicial de R$ 100.000 e crescimento de 2% ao mês:</p>
+<table>
+<thead>
+<tr>
+  <th>Mês</th>
+  <th style="text-align:right">Meta ilustrativa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1</td>
+  <td style="text-align:right">R$ 100.000,00</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td style="text-align:right">R$ 102.000,00</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td style="text-align:right">R$ 104.040,00</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td style="text-align:right">R$ 106.120,80</td>
+</tr>
+</tbody>
+</table>
+<p>A projeção pode ter de 1 a 36 meses. O aumento inicial sobre a referência é opcional quando existe histórico; sem histórico, o valor de partida deve ser digitado na tabela por assessoria.</p>
+<h3>Gráfico de evolução</h3>
+<p>O gráfico apresenta a meta consolidada mês a mês. A linha azul representa a meta projetada. A linha amarela tracejada representa a referência mensal histórica; quando não há histórico, ela representa o patamar inicial do cenário. O gráfico é atualizado conforme os métodos, taxas, valores manuais e horizonte são alterados.</p>
+<p>A tabela mensal logo abaixo apresenta os valores exatos usados no gráfico.</p>
+<h2>6. Comissões por aging</h2>
+<p>A área <strong>Comissões</strong> compara a política vigente com uma nova tabela condicionada ao alcance de uma meta.</p>
+<h3>Política vigente</h3>
+<p>A tabela atual é lida da seção de política de comissionamento presente no Excel. As taxas B2C e B2B são exibidas por faixa de atraso (aging) e mantidas como referência. A edição da nova tabela não altera essa política.</p>
+<h3>Criar um estudo</h3>
+<p>Cada estudo guarda, durante a sessão atual:</p>
+<ul>
+<li>nome do cenário;</li>
+<li>assessoria avaliada;</li>
+<li>indicador que libera o incentivo (bruto, ativo ou cancelado);</li>
+<li>condição para alcançar a meta;</li>
+<li>saldo da carteira cancelada, quando o gatilho for percentual;</li>
+<li>novas taxas B2C e B2B por faixa de aging.</li>
+</ul>
+<p>É possível manter vários estudos e alternar entre eles. As alterações ficam em memória enquanto a página permanece aberta.</p>
+<h3>Tipos de gatilho</h3>
+<p><strong>Percentual da carteira cancelada</strong></p>
+<p>Informe o saldo da carteira cancelada da assessoria e o percentual desejado. Exemplo: saldo de R$ 2.000.000 e meta de 10% geram um gatilho de R$ 200.000. O indicador de recuperação que conta para atingir o gatilho pode ser bruto, ativo ou cancelado.</p>
+<p><strong>Valor bruto de recuperação</strong></p>
+<p>Informe diretamente o valor que a assessoria deve recuperar para desbloquear a nova tabela.</p>
+<h3>Estimativa de comissão</h3>
+<p>O simulador utiliza a distribuição histórica de recuperação por aging da assessoria selecionada para estimar como o valor de recuperação se distribui entre as faixas. Em seguida:</p>
+<ol>
+<li>calcula o peso de cada faixa no total recuperado do período;</li>
+<li>aplica esse peso ao valor avaliado no gatilho (ou à média atual, caso ela já supere o gatilho);</li>
+<li>calcula a comissão estimada pela política atual e pela nova tabela;</li>
+<li>compara os custos e apresenta a diferença estimada.</li>
+</ol>
+<p>A taxa combinada de cada faixa usa a participação histórica de CPF e CNPJ da assessoria como aproximação para B2C e B2B, respectivamente. A tabela alternativa pode ser editada em cada faixa; o resultado e o gráfico de custos são recalculados após a alteração.</p>
+<p>Quando a média atual já alcança a meta, a recuperação adicional é apresentada como zero. Nesse caso, o custo da nova tabela é estimado no patamar médio atual, sem inventar recuperação adicional negativa.</p>
+<h2>7. Exportação</h2>
+<p>O botão único <strong>Exportar estudo</strong> fica centralizado na área de trabalho do módulo Assessorias.</p>
+<h3>Excel (.xlsx)</h3>
+<p>O arquivo exportado reúne abas de resumo, desempenho por assessoria, metas, evolução mensal, cenários de comissão, taxas por aging, memória de cálculo e histórico filtrado. O conteúdo considera os filtros e as configurações presentes na sessão no momento da exportação.</p>
+<h3>PDF</h3>
+<p>A opção PDF abre a janela de impressão do navegador. Selecione <strong>Salvar como PDF</strong>. O relatório inclui premissas, resultados, gráfico de evolução, cenários de comissão, detalhamento por aging e histórico filtrado.</p>
+<h2>8. Dados, privacidade e limites</h2>
+<ul>
+<li>A aplicação não possui backend nem envia os dados para uma API própria.</li>
+<li>O Excel selecionado é interpretado na memória do navegador.</li>
+<li>O histórico e os cenários não são gravados automaticamente no navegador. Ao atualizar ou fechar a página, importe novamente o Excel e refaça ou reimporte os estudos necessários.</li>
+<li>Não inclua o Excel confidencial, arquivos CSV exportados ou relatórios PDF no repositório público.</li>
+<li>O arquivo <code>.gitignore</code> exclui formatos de planilha e exportações comuns, mas revise sempre o que será enviado ao GitHub.</li>
+</ul>
+<h3>Limitações da estimativa por aging</h3>
+<p>A planilha mensal não cruza, por título, aging, CPF/CNPJ e situação ativa/cancelada. Assim, o custo da nova política é uma estimativa gerencial baseada na distribuição histórica por aging e na composição CPF/CNPJ. Não substitui a apuração transacional de comissão por título.</p>
+<p>O saldo da carteira cancelada por assessoria também não é fornecido pelo histórico mensal. Por isso, no gatilho percentual, esse saldo precisa ser informado manualmente e atualizado pelo responsável pelo estudo.</p>
+<p>Antes de transformar uma simulação em regra de pagamento, valide as premissas com a área financeira e compare o resultado com uma apuração real.</p>
+<h2>9. Executar localmente</h2>
+<p>É necessário servir os arquivos por HTTP para que o navegador consiga carregar a aplicação e, opcionalmente, o histórico local.</p>
+<p>Com Python instalado, abra o terminal na pasta do projeto e execute:</p>
+<pre><code class="language-bash">python -m http.server 8000
+</code></pre>
+<p>Depois, acesse <code>http://localhost:8000</code>.</p>
+<p>Se desejar carregar o Excel automaticamente durante testes locais, crie <code>dados/</code> e coloque nele <code>historico.xlsx</code>. Não use esse recurso em um repositório público e não comite a planilha.</p>
+<h2>10. Publicar no GitHub Pages</h2>
+<ol>
+<li>Envie para o repositório os arquivos <code>index.html</code>, <code>css/</code>, <code>js/</code>, <code>.gitignore</code>, <code>.nojekyll</code> e <code>README.md</code>.</li>
+<li>Confirme que nenhum Excel, CSV ou PDF confidencial está na área de commit.</li>
+<li>No GitHub, abra <strong>Settings → Pages</strong>.</li>
+<li>Selecione a branch e a pasta que contém <code>index.html</code> como fonte de publicação.</li>
+<li>Salve e aguarde a publicação do GitHub Pages.</li>
+<li>Abra o endereço publicado e importe o arquivo confidencial diretamente pelo navegador.</li>
+</ol>
+<h2>11. Arquivos do projeto</h2>
+<pre><code class="language-text">simulador-comissoes-assessorias/
+├── index.html
+├── README.md
+├── .gitignore
+├── .nojekyll
+├── css/
+│   └── styles.css
+└── js/
+    └── app.js
+</code></pre>
+
+    <div class="doc-links"><a href="./index.html">Voltar ao simulador</a><a href="./README.md">Abrir arquivo README.md</a></div>
+    <footer>Documentação do projeto · Simulador Cobranças Master</footer>
+  </main>
+</body>
+</html>
