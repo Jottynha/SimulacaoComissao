@@ -1,79 +1,101 @@
-# Simulador de Metas e Comissões das Assessorias
+# Central de Recuperação — Simulador de Assessorias
 
-Aplicação estática em HTML, CSS e JavaScript para analisar o histórico de recuperação, projetar metas e testar tabelas de comissão por valor bruto recuperado. Foi preparada para publicação no GitHub Pages.
+Aplicação estática em HTML, CSS e JavaScript para analisar o histórico de recuperação de assessorias e criar cenários independentes de metas e comissões. Preparada para publicação no GitHub Pages.
 
-## 1. Como executar localmente
+## 1. Executar localmente
 
 1. Extraia a pasta do projeto.
-2. Crie uma pasta chamada `dados` na raiz do projeto.
-3. Copie o Excel confidencial para `dados/historico.xlsx`.
-4. Inicie um servidor estático na raiz do projeto. Por exemplo, com Python:
+2. Crie uma pasta `dados` na raiz do projeto.
+3. Coloque o Excel confidencial em `dados/historico.xlsx` (ou mantenha o nome original `analise_assessorias_14-10-26(1).xlsx`).
+4. Abra um terminal na raiz do projeto e execute:
 
    ```bash
    python -m http.server 8000
    ```
 
-5. Abra `http://localhost:8000` no navegador.
+5. Acesse `http://localhost:8000`.
 
-O sistema tenta localizar automaticamente `./dados/historico.xlsx` e, como alternativa, o nome do arquivo de origem `./dados/analise_assessorias_14-10-26(1).xlsx`. A pasta `dados/` e arquivos Excel estão no `.gitignore` e não devem ser adicionados ao Git. A leitura automática funciona quando a aplicação é servida localmente por HTTP.
+O sistema tenta carregar automaticamente o arquivo que estiver em `dados/`. Também é possível selecionar o Excel pelo botão de importação. Não abra `index.html` diretamente por `file://` para usar o carregamento automático.
 
-Também é possível abrir o site publicado e usar **Selecionar arquivo Excel** para importar o histórico manualmente.
+## 2. Publicar no GitHub Pages
 
-> Não abra o `index.html` diretamente por `file://` para o uso local automático. Use um servidor estático local, como o comando acima ou a extensão Live Server do VS Code.
+1. Crie um repositório e envie os arquivos do projeto.
+2. Mantenha o Excel na pasta local `dados/`, protegida pelo `.gitignore`.
+3. **Não comite o Excel nem arquivos derivados com dados confidenciais.**
+4. No GitHub, abra `Settings → Pages`.
+5. Em `Build and deployment`, selecione `Deploy from a branch`, escolha a branch principal e a pasta `/ (root)`.
+6. No site publicado, selecione o arquivo Excel pelo navegador a cada sessão.
 
-## 2. Publicação no GitHub Pages
+O GitHub Pages hospeda arquivos estáticos e não tem permissão para ler pastas privadas do computador do usuário. A leitura e os cálculos são feitos no dispositivo; a planilha não é enviada ao GitHub Pages ou a uma API.
 
-1. Crie um repositório com os arquivos deste projeto.
-2. Mantenha o Excel dentro da pasta local `dados/`, sem removê-la do `.gitignore`.
-3. Envie para o GitHub somente os arquivos do projeto (`index.html`, `css/`, `js/`, `README.md`, `.gitignore` e `.nojekyll`).
-4. No GitHub, abra **Settings → Pages**.
-5. Em **Build and deployment**, selecione **Deploy from a branch**, escolha a branch principal e a pasta `/ (root)`.
-6. Acesse o endereço informado pelo GitHub Pages.
+## 3. Estrutura da aplicação
 
-**Importante:** GitHub Pages hospeda arquivos estáticos. Um site publicado não consegue ler uma pasta privada do computador de quem o acessa. Por isso, no endereço publicado, o Excel deverá ser selecionado pelo botão de importação a cada nova sessão. O arquivo não precisa e não deve ser comitado.
+A navegação superior separa módulos. **Assessorias** contém tudo que está implementado atualmente. **B2B** aparece como módulo futuro e não compartilha os cálculos de Assessorias. As seções de Assessorias são:
 
-## 3. Como o simulador calcula
+- **Visão geral:** ranking, indicadores consolidados e resumo por assessoria.
+- **Metas e evolução:** três modos independentes de definição de meta.
+- **Comissões:** tabelas progressivas, taxa da faixa alcançada e gatilho de bônus.
+- **Política atual:** leitura das faixas B2C/B2B por atraso identificadas no Excel, apenas como referência.
+- **Histórico detalhado:** consulta dos registros de origem.
 
-### Histórico e filtros
+## 4. Construtor de metas
 
-- O sistema lê a aba `Histórico Assessorias`.
-- Identifica assessoria, mês, cobrança, recuperado bruto, recuperado ativo, recuperado cancelado, comissão, conversão e custo de comissão sobre recuperação.
-- Linhas de totalização são descartadas para não duplicar os valores.
-- Meses ausentes não são tratados como recuperação zero. A média mensal de cada assessoria considera somente os meses em que ela possui registro. Isso é relevante quando uma assessoria começa a aparecer no histórico depois das demais.
-- Registros identificados como `PARCIAL` são excluídos por padrão. O filtro `Incluir mês parcial` permite incluí-los deliberadamente.
+O indicador da meta pode ser:
 
-### Simulador de metas
+- `Recuperado bruto`: usa o valor bruto recuperado informado no histórico.
+- `Somente recuperado ativo`: considera somente o componente ativo.
+- `Somente recuperado cancelado`: considera somente o componente cancelado.
+- `Ativo + cancelado`: soma os dois componentes apenas quando ambos estiverem preenchidos no mesmo registro.
 
-- A referência padrão é a média mensal do período filtrado.
-- Também é possível usar o último mês completo disponível de cada assessoria.
-- O percentual inicial de crescimento é 10%, mas pode ser alterado pelo campo numérico ou pelo controle deslizante.
-- A meta mensal é calculada sobre o indicador escolhido (recuperado bruto ou recuperado ativo).
-- A projeção anual multiplica a meta mensal por 12 e não incorpora sazonalidade.
+O método de referência pode usar a média mensal do período ou o último mês com dado disponível. Meses sem valor no indicador escolhido não são convertidos em zero. Se o histórico não contiver determinado componente, a interface informa a ausência e deixa o resultado como não disponível.
 
-### Tabelas de comissão por volume
+Há três métodos para a meta:
 
-- A tabela geral começa com a taxa efetiva histórica ponderada (comissão registrada ÷ recuperação bruta) no recorte de meses completos.
-- Novas faixas podem ser adicionadas e seus limites e percentuais alterados.
-- `Progressiva por faixa`: cada percentual incide apenas sobre a parcela do valor dentro da faixa.
-- `Taxa da faixa atingida`: o percentual da faixa mais alta alcançada incide sobre todo o valor recuperado.
-- É possível criar uma tabela específica por assessoria. Quando uma tabela individual ainda não foi personalizada, ela herda o modelo geral.
-- O comparativo mostra a comissão histórica média, a comissão simulada sobre a meta, a variação de custo e a recuperação líquida após comissão.
+1. **Crescimento sobre o histórico:** aplica um percentual livre à referência e mantém a meta mensal constante durante a projeção.
+2. **Valor manual por assessoria:** permite preencher um valor comum para todas as assessorias do recorte e editar cada linha individualmente. O valor não fica limitado à média histórica.
+3. **Aumento percentual a cada mês:** define um aumento inicial para o primeiro mês e uma taxa composta que incide sobre o mês anterior. O horizonte pode variar de 1 a 36 meses.
 
-**Limite metodológico:** a política histórica da planilha calcula comissão por faixa de atraso e tipo de contrato (B2C/B2B). A tabela nova baseada somente no valor recuperado é uma hipótese alternativa de incentivo. A taxa efetiva histórica serve como referência inicial, mas não permite reproduzir exatamente a comissão original sem a composição dos títulos por atraso e tipo de contrato.
+A tabela individual apresenta referência, meta inicial, meta final, total projetado e aumento inicial. Uma segunda tabela apresenta o consolidado de cada mês projetado.
 
-### Exportações
+## 5. Construtor de comissões
 
-As abas de metas, comissões e histórico permitem exportar CSV, compatível com Excel. O arquivo gerado contém somente os dados do recorte e da simulação atual.
+As regras podem ser gerais ou específicas para uma assessoria. Uma regra individual começa como cópia do modelo geral e passa a ser independente quando editada.
 
-## 4. Privacidade e dependências
+- **Percentual progressivo por faixa:** cada taxa incide apenas sobre a parcela do valor dentro daquela faixa.
+- **Percentual da faixa atingida:** a taxa da maior faixa alcançada incide sobre toda a base de comissão.
+- **Gatilho com bônus:** define uma comissão-base, um indicador para avaliar o gatilho, o valor mínimo e um acréscimo em pontos percentuais (p.p.). Por exemplo, 8% de comissão-base + 1,5 p.p. resulta em 9,5%. Ao atingir o valor mínimo, o acréscimo é aplicado sobre toda a base de comissão do período, não apenas sobre o excedente.
 
-- O Excel é lido e tratado em memória no navegador.
-- O projeto não possui API, banco de dados, login, analytics ou armazenamento remoto.
-- Os dados importados não são gravados em `localStorage` ou `IndexedDB`; ao fechar ou atualizar a página, será necessário importar o histórico novamente.
-- A biblioteca SheetJS Community Edition 0.20.3 é carregada do CDN oficial (`https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js`) para interpretar arquivos Excel. A biblioteca recebe apenas a requisição do próprio script; o conteúdo da planilha é passado ao JavaScript local do navegador e não é enviado ao CDN.
-- Uma conexão com a internet é necessária para carregar o script SheetJS hospedado no CDN.
+A base da comissão pode acompanhar o indicador da meta ou usar recuperado bruto, ativo, cancelado ou ativo + cancelado. O indicador que libera o bônus também pode ser escolhido separadamente.
 
-## 5. Estrutura
+**Limite dos dados:** o histórico disponível é agregado por assessoria e mês e não possui a relação individual de títulos. Portanto, o gatilho estima o custo sobre o total do indicador escolhido. Não recalcula nem audita comissão título a título. Quando uma base de comissão for diferente do indicador da meta, a projeção dessa outra base usa a referência histórica; no modo de meta manual, o valor digitado é aplicado somente ao indicador da meta.
+
+A comissão histórica é exibida como comparação. A taxa efetiva histórica é uma referência agregada e não reproduz necessariamente a política original por atraso e tipo de documento.
+
+## 6. Exportações
+
+O botão **Exportar estudo Excel** gera um arquivo `.xlsx` com várias abas:
+
+- `Resumo`: origem, filtros, premissas e totais.
+- `Metas`: referência e metas por assessoria.
+- `Evolução mensal`: projeção mês a mês.
+- `Comissões`: base de cálculo, gatilho, taxa, custo e líquido.
+- `Regras de comissão`: configuração das tabelas e gatilhos.
+- `Histórico filtrado`: registros incluídos no recorte atual.
+- `Política atual`: faixas B2C/B2B, quando encontradas na planilha.
+
+O botão **Gerar relatório PDF** abre a janela de impressão do navegador com um relatório resumido do estudo. Escolha **Salvar como PDF** no destino de impressão. A orientação do relatório é paisagem para acomodar as tabelas.
+
+As exportações são geradas localmente pelo navegador. O usuário deve tratar os arquivos exportados como confidenciais, pois eles podem conter dados históricos da empresa.
+
+## 7. Privacidade e dependências
+
+- Os dados do Excel são processados em memória no navegador.
+- O projeto não possui API, banco de dados, login, analytics ou sincronização de dados.
+- Os dados importados e as regras editadas não são persistidos em `localStorage` ou `IndexedDB`; ao fechar/atualizar a página, será necessário importar o histórico novamente e refazer os parâmetros.
+- A biblioteca SheetJS Community Edition 0.20.3 é carregada pelo CDN oficial (`https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js`) para ler e gerar `.xlsx`. O conteúdo do arquivo não é enviado ao CDN.
+- É necessária conexão com a internet para carregar a biblioteca SheetJS.
+
+## 8. Estrutura de arquivos
 
 ```text
 simulador-comissoes-assessorias/
@@ -87,6 +109,6 @@ simulador-comissoes-assessorias/
 └── README.md
 ```
 
-## 6. Recomendações antes de usar para aprovar pagamentos
+## 9. Validação antes de adotar uma política
 
-Use o simulador para testar hipóteses e comparar cenários, não como cálculo oficial de pagamento sem validação. Antes de transformar uma regra em política, valide a fórmula com Financeiro, Cobrança e Jurídico; teste a regra com meses históricos completos; avalie o custo incremental, a recuperação líquida e possíveis efeitos de concentração em títulos de maior atraso; e documente critérios de elegibilidade, estornos, cancelamentos e pagamento de títulos renegociados.
+Use a aplicação para explorar hipóteses e comparar cenários. Antes de converter uma simulação em regra oficial de pagamento, valide as premissas com as áreas responsáveis, teste os resultados com meses históricos completos e documente critérios de elegibilidade, estornos, cancelamentos, títulos renegociados, impostos e regras contratuais. O arquivo Excel exportado e o relatório PDF são estudos de apoio, não autorização de pagamento.

@@ -332,3 +332,125 @@ input[type=range] { width: 100%; accent-color: var(--teal); cursor: pointer; }
 .empty-state.drag-over, .page-heading.drag-over { outline: 2px dashed var(--teal); outline-offset: 5px; background-color: #f6fbf8; }
 .muted-empty { color: #93a0a4; font-size: 10px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* =========================================================
+   Módulos e construtores avançados de cenários
+   ========================================================= */
+.module-nav { display: flex; align-items: center; gap: 8px; margin: 2px 0 15px; padding: 5px; width: fit-content; border: 1px solid var(--line); border-radius: 12px; background: #eaf0ee; }
+.module-button { min-height: 38px; padding: 0 15px; display: inline-flex; align-items: center; gap: 9px; border: 0; border-radius: 8px; color: #72838a; background: transparent; font-size: 11px; font-weight: 800; }
+.module-button.active { color: var(--navy); background: #fff; box-shadow: 0 2px 7px rgba(24,54,60,.08); }
+.module-symbol { font-size: 16px; }
+.module-button small { margin-left: 3px; padding: 4px 6px; border-radius: 5px; color: #859399; background: #f0f3f2; font-size: 8px; font-weight: 700; }
+.module-disabled { cursor: not-allowed; opacity: .72; }
+.study-toolbar { margin: 0 0 15px; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.study-toolbar > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.study-toolbar strong { color: var(--navy); font-size: 11px; }
+.study-toolbar span { color: var(--muted-2); font-size: 9px; }
+.study-actions { display: flex; align-items: center; gap: 8px; }
+.target-builder { margin-bottom: 15px; padding: 20px 22px 16px; }
+.builder-heading { margin-bottom: 18px; }
+.builder-heading > div { display: flex; align-items: center; gap: 11px; }
+.step-number { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border-radius: 9px; color: var(--teal-dark); background: var(--teal-soft); font-size: 12px; font-weight: 800; }
+.builder-heading h3 { margin: 0 0 4px; color: var(--navy); font: 800 14px "Segoe UI", sans-serif; }
+.builder-heading p { margin: 0; color: var(--muted-2); font-size: 10px; }
+.builder-grid { display: grid; grid-template-columns: 1.1fr .9fr 1.1fr; gap: 16px; }
+.builder-grid .control-block, .trigger-grid .control-block { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.control-block select, .control-block input:not([type="range"]) { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); background-color: #fff; font-size: 11px; font-weight: 600; }
+.control-block input:disabled, .control-block select:disabled { opacity: .6; cursor: not-allowed; background: #f2f5f4; }
+.control-block small { color: var(--muted-2); font-size: 9px; line-height: 1.45; }
+.builder-divider { height: 1px; margin: 18px 0 16px; background: var(--line); }
+.mode-controls { display: grid; grid-template-columns: minmax(220px, .8fr) 1.2fr; align-items: center; gap: 20px; }
+.mode-controls .control-growth { gap: 9px; }
+.mode-description { margin: 0; padding: 11px 13px; border-radius: 9px; color: #657a79; background: #f5f8f7; font-size: 10px; line-height: 1.55; }
+.inline-suffix { display: flex; align-items: center; gap: 8px; }
+.inline-suffix input { flex: 1; min-width: 0; }
+.inline-suffix span { color: var(--teal-dark); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.manual-apply-block { align-self: end; }
+.manual-apply-block .button { height: 38px; }
+.builder-footer { margin-top: 17px; padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-top: 1px solid var(--line); color: #829197; font-size: 9px; }
+.coverage-note { color: var(--teal-dark); font-weight: 700; }
+.cell-subtext { display: block; margin-top: 4px; color: var(--muted-2); font-size: 8px; font-weight: 500; }
+.table-number-input { width: 140px; max-width: 100%; height: 32px; padding: 0 8px; border: 1px solid #cbdedb; border-radius: 7px; color: var(--teal-dark); background: #fbfefd; font: 800 11px "Segoe UI", sans-serif; text-align: right; }
+.evolution-card { margin-top: 15px; }
+.evolution-card .table-wrap { padding-bottom: 3px; }
+.evolution-card table { min-width: max-content; }
+.evolution-card th, .evolution-card td { min-width: 104px; }
+.evolution-card th:first-child, .evolution-card td:first-child { min-width: 155px; text-align: left; }
+.trigger-settings { padding: 2px 0 0; }
+.trigger-callout { margin: 0 0 14px; padding: 12px 13px; border-left: 3px solid var(--lime); border-radius: 8px; color: #66777a; background: #f6f8f1; font-size: 10px; line-height: 1.55; }
+.trigger-callout strong { color: var(--navy); }
+.trigger-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.trigger-status { display: inline-block; padding: 5px 7px; border-radius: 6px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.trigger-status.reached { color: #176c5c; background: #e7f4ed; }
+.trigger-status.not-reached { color: #89672d; background: #fbf3e6; }
+.button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+#printReport { display: none; }
+.print-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 18px; border-bottom: 2px solid #193d47; }
+.print-kicker { margin-bottom: 7px; color: #167d75; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.print-header h1 { margin: 0 0 5px; color: #102b35; font-size: 25px; }
+.print-header p { margin: 0; color: #71828a; font-size: 9px; }
+.print-period { padding: 7px 10px; border: 1px solid #dce5e2; border-radius: 7px; color: #38515b; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.print-meta { margin: 16px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.print-meta > div, .print-kpis > div { padding: 9px 10px; border: 1px solid #e5ebed; border-radius: 7px; }
+.print-meta span, .print-kpis span { display: block; margin-bottom: 5px; color: #7c8b90; font-size: 8px; }
+.print-meta strong { display: block; color: #203c44; font-size: 9px; }
+.print-kpis { margin-bottom: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+.print-kpis > div { background: #f4f8f6; }
+.print-kpis strong { color: #102b35; font-size: 12px; }
+#printReport h2 { margin: 17px 0 8px; color: #102b35; font-size: 13px; }
+.print-table { width: 100%; border-collapse: collapse; font-size: 8px; }
+.print-table th { padding: 7px 6px; color: #49616a; background: #eef3f1; text-align: left; }
+.print-table td { padding: 6px; border-bottom: 1px solid #e8eeee; color: #344d55; }
+.print-footer { margin-top: 19px; padding-top: 9px; border-top: 1px solid #dce5e2; color: #77878c; font-size: 8px; line-height: 1.5; }
+
+@media (max-width: 1100px) {
+  .builder-grid { grid-template-columns: 1fr 1fr; }
+  .builder-grid .control-block:last-child { grid-column: 1/-1; }
+}
+@media (max-width: 760px) {
+  .module-nav { width: 100%; }
+  .module-button { flex: 1; justify-content: center; padding: 0 8px; }
+  .module-button small { display: none; }
+  .study-toolbar { align-items: flex-start; flex-direction: column; }
+  .study-actions { width: 100%; }
+  .study-actions .button { flex: 1; padding: 9px 8px; font-size: 9px; }
+  .target-builder { padding: 16px; }
+  .builder-grid, .mode-controls, .trigger-grid { grid-template-columns: 1fr; gap: 13px; }
+  .builder-grid .control-block:last-child { grid-column: auto; }
+  .mode-description { min-height: auto; }
+  .builder-footer { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .target-highlight { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .target-highlight .target-intro { grid-column: 1/-1; }
+  .target-kpi { padding-left: 10px; }
+  .target-kpi:nth-of-type(2) { padding-left: 0; border-left: 0; }
+  .table-number-input { width: 115px; }
+}
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  body { background: #fff !important; color: #172e37 !important; }
+  body > * { display: none !important; }
+  #printReport { display: block !important; position: absolute; inset: 0 auto auto 0; width: 100%; padding: 0; color: #172e37 !important; background: #fff !important; }
+  #printReport * { visibility: visible !important; }
+  .print-header, .print-meta, .print-kpis, .print-table, .print-footer { break-inside: avoid; }
+  .print-table { page-break-inside: auto; }
+  .print-table tr { break-inside: avoid; }
+}
+
+.empty-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.manual-scenario-setup { max-width: 480px; margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #f8fbfa; }
+.manual-scenario-setup label { display: block; margin-bottom: 7px; color: var(--ink-soft); font-size: 10px; font-weight: 800; }
+.manual-scenario-setup textarea { width: 100%; min-height: 72px; margin-bottom: 10px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); background: white; font: 11px/1.45 "Segoe UI", sans-serif; resize: vertical; }
+.agency-add-strip { margin: 0 0 15px; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid var(--line); border-radius: 12px; background: #f8fbfa; }
+.agency-add-strip > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.agency-add-strip strong { color: var(--ink-soft); font-size: 10px; }
+.agency-add-strip span { color: var(--muted-2); font-size: 9px; }
+.agency-add-controls { display: flex; align-items: center; gap: 7px; }
+.agency-add-controls input { width: 210px; height: 33px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; color: var(--ink); background: white; font-size: 10px; }
+@media (max-width: 760px) {
+  .empty-actions { flex-direction: column; }
+  .empty-actions .button { width: 100%; }
+  .agency-add-strip { align-items: stretch; flex-direction: column; }
+  .agency-add-controls { width: 100%; }
+  .agency-add-controls input { flex: 1; min-width: 0; }
+}
